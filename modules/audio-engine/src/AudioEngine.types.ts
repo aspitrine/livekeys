@@ -34,7 +34,12 @@ export type LayerConfig = {
   sustainEnabled: boolean;
   /** false for chord pads: ignore the keyboard, play only notes sent with setLayerNotes. Default true. */
   keyboard?: boolean;
+  /** Send to the shared reverb, 0…1 (post-fader). */
+  reverbSend: number;
 };
+
+export type Ambience = 'off' | 'room' | 'chamber' | 'hall' | 'plate' | 'cathedral';
+export type VelocityCurveKind = 'light' | 'normal' | 'heavy';
 
 export type BundledSoundFont = { name: string; path: string };
 
@@ -102,7 +107,8 @@ export type MidiEvent = {
 export type AudioEngineModuleEvents = {
   onMidiEvent: (event: MidiEvent) => void;
   onMidiSourcesChanged: (event: { sources: MidiSource[] }) => void;
-  onLevel: (event: { peak: number }) => void;
+  /** `peak`: real output peak (after limiter and −1 dBFS ceiling). `reductionDb`: what the limiter takes off. */
+  onLevel: (event: { peak: number; reductionDb: number }) => void;
   /** Audio came back after an interruption (call, Siri) or a route change. */
   onEngineRestarted: () => void;
   onBluetoothMidiChanged: (event: { devices: BluetoothMidiDevice[] }) => void;

@@ -66,6 +66,7 @@ export async function bootEngine() {
     volume: number;
     limiter: boolean;
     bluetooth: string;
+    sound: string;
   } | null = null;
 
   const apply = (state: ReturnType<typeof useConcert.getState>) => {
@@ -85,10 +86,18 @@ export async function bootEngine() {
     }
     if (state.masterVolume !== last?.volume) AudioEngine.setMasterVolume(state.masterVolume);
     if (state.settings.limiter !== last?.limiter) AudioEngine.setLimiterEnabled(state.settings.limiter);
+    const { glue, speakerProtection, ambience, velocityCurve } = state.settings;
+    const sound = [glue, speakerProtection, ambience, velocityCurve].join('|');
+    if (sound !== last?.sound) {
+      AudioEngine.setGlueEnabled(glue);
+      AudioEngine.setSpeakerProtection(speakerProtection);
+      AudioEngine.setAmbience(ambience);
+      AudioEngine.setVelocityCurve(velocityCurve);
+    }
     const { bluetoothAutoReconnect, bluetoothDevices } = state.settings;
     const bluetooth = bluetoothAutoReconnect ? bluetoothDevices.map((d) => d.id).join(',') : '';
     if (bluetooth !== last?.bluetooth) AudioEngine.setBluetoothMidiDevices(bluetooth ? bluetooth.split(',') : []);
-    last = { active, preload, volume: state.masterVolume, limiter: state.settings.limiter, bluetooth };
+    last = { active, preload, volume: state.masterVolume, limiter: state.settings.limiter, bluetooth, sound };
   };
 
   // An interruption silenced the pads natively: play the chords the UI still shows as playing.

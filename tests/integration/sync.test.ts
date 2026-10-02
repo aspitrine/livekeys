@@ -1,6 +1,7 @@
 import AudioEngine from '../../modules/audio-engine';
 import { applyLiveSettings, capturePluginStates, syncPatches } from '../../src/engine/sync';
 import { selectCurrentPatch, selectLayer, useConcert } from '../../src/store/concert';
+import levels from '../../src/model/soundLevels.json';
 import { resetConcert } from '../fixtures';
 
 let patchId: string;
@@ -51,7 +52,13 @@ test('loads instruments and gives a new pad a quiet gain without keyboard notes'
     padId,
     expect.objectContaining({ volume: expect.closeTo(0.01, 8), keyboard: false }),
   );
-  expect(AudioEngine.loadSoundFont).toHaveBeenCalledWith(padId, '/test/GeneralUser-GS.sf2', 89, 0);
+  expect(AudioEngine.loadSoundFont).toHaveBeenCalledWith(
+    padId,
+    '/test/GeneralUser-GS.sf2',
+    89,
+    0,
+    levels['GeneralUser-GS/0/89'],
+  );
   expect(AudioEngine.setActiveLayers).toHaveBeenCalledWith([pianoId, padId]);
 });
 
@@ -91,7 +98,7 @@ test('a sound change reloads only that layer', async () => {
   useConcert.getState().updateLayer(pianoId, { sound: { ...layer.sound, program: 4 } });
   await sync();
   expect(AudioEngine.loadSoundFont).toHaveBeenCalledTimes(1);
-  expect(AudioEngine.loadSoundFont).toHaveBeenCalledWith(pianoId, '/test/UprightPianoKW-small.sf2', 4, 0);
+  expect(AudioEngine.loadSoundFont).toHaveBeenCalledWith(pianoId, '/test/UprightPianoKW-small.sf2', 4, 0, 0);
 });
 
 test('loads, bypasses, reorders and removes effects through the native boundary', async () => {
@@ -183,4 +190,13 @@ test('mute and volume apply at once even while a neighbour bank is still loading
   applyLiveSettings(selectCurrentPatch(useConcert.getState()));
   expect(AudioEngine.updateLayer).toHaveBeenCalledWith(pianoId, { mute: true, volume: 0.3 });
   void pending;
+});
+
+test('every built-in sound is level-corrected so no preset plays far louder than the others', () => {
+  const values = Object.values(levels as Record<string, number>);
+  expect(values.length).toBeGreaterThan(280);
+  // Corrections stay bounded: quiet sounds are raised a little, hot ones (leads, brass, the GS grand) lowered.
+  expect(Math.max(...values)).toBeLessThanOrEqual(6);
+  expect(Math.min(...values)).toBeGreaterThanOrEqual(-24);
+  expect((levels as Record<string, number>)['GeneralUser-GS/0/0']).toBeLessThan(-6);
 });

@@ -17,7 +17,8 @@ final class MixerEngine {
   static let shared = MixerEngine()
 
   var onMidiEvent: ((MidiEvent) -> Void)?
-  var onLevel: ((Float) -> Void)?
+  /// Output peak (after limiter and ceiling) and how many dB the limiter takes off, ~30 times / s.
+  var onLevel: ((_ peak: Float, _ reductionDb: Float) -> Void)?
   /// The engine came back after an interruption or a route change (JS restarts what it drives, e.g. pads).
   var onRestarted: (() -> Void)?
 
@@ -45,6 +46,12 @@ final class MixerEngine {
     componentFlags: 0,
     componentFlagsMask: 0
   ))
+  /// Final stage: keeps the output 1 dB under full scale (AUPeakLimiter can overshoot 0 dBFS slightly).
+  private let ceiling = AVAudioMixerNode()
+  static let ceilingGain: Float = 0.891  // −1 dBFS
+  /// Peaks accumulated by the meter taps between two reports (taps run off the audio thread).
+  private var meterPre: Float = 0
+  private var meterPost: Float = 0
   private var observers: [NSObjectProtocol] = []
   private var lastLevelTime: CFTimeInterval = 0
 
@@ -70,7 +77,8 @@ final class MixerEngine {
     lock.withLock { runningRequested = false }
     panic()
     graph.sync {
-      engine.mainMixerNode.removeTap(onBus: 0)
+      glue.removeTap(onBus: 0)
+      ceiling.removeTap(onBus: 0)
       masterMeter.detach()
       engine.stop()
     }
@@ -97,16 +105,105 @@ final class MixerEngine {
     set { limiter.bypass = !newValue }
   }
 
-  /// mainMixer → limiter → output. Done once, before the engine starts.
+  // MARK: - Master bus
+
+  /// Built-in speakers cannot reproduce deep bass and distort on it: high-pass them (other outputs untouched).
+  private let speakerFilter = AVAudioUnitEQ(numberOfBands: 1)
+  /// Gentle bus compression ("glue"): raises the average level and holds peaks before the limiter.
+  private let glue = AVAudioUnitEffect(audioComponentDescription: AudioComponentDescription(
+    componentType: kAudioUnitType_Effect,
+    componentSubType: kAudioUnitSubType_DynamicsProcessor,
+    componentManufacturer: kAudioUnitManufacturer_Apple,
+    componentFlags: 0,
+    componentFlagsMask: 0
+  ))
+  /// Shared room: every layer sends to it (post-fader), like an aux return on a mixing desk.
+  private let reverbBus = AVAudioMixerNode()
+  private let reverb = AVAudioUnitEffect(audioComponentDescription: AudioComponentDescription(
+    componentType: kAudioUnitType_Effect,
+    componentSubType: kAudioUnitSubType_Reverb2,
+    componentManufacturer: kAudioUnitManufacturer_Apple,
+    componentFlags: 0,
+    componentFlagsMask: 0
+  ))
+  private var speakerProtection = true
+
+  /// Layers → mainMixer → speaker filter → glue → limiter → ceiling (−1 dBFS) → output, plus
+  /// layers → reverb bus → reverb (100 % wet) → mainMixer. Done once, before the engine starts.
   private func installLimiter() {
     guard limiter.engine == nil else { return }
     let mixer = engine.mainMixerNode
     let format = mixer.outputFormat(forBus: 0)
-    engine.attach(limiter)
+    for node in [speakerFilter, glue, limiter, ceiling, reverbBus, reverb] as [AVAudioNode] { engine.attach(node) }
     engine.disconnectNodeOutput(mixer)
-    engine.connect(mixer, to: limiter, format: format)
-    engine.connect(limiter, to: engine.outputNode, format: format)
+    engine.connect(mixer, to: speakerFilter, format: format)
+    engine.connect(speakerFilter, to: glue, format: format)
+    engine.connect(glue, to: limiter, format: format)
+    engine.connect(limiter, to: ceiling, format: format)
+    engine.connect(ceiling, to: engine.outputNode, format: format)
+    engine.connect(reverbBus, to: reverb, format: format)
+    engine.connect(reverb, to: mixer, fromBus: 0, toBus: mixer.nextAvailableInputBus, format: format)
+    ceiling.outputVolume = Self.ceilingGain
+
+    let band = speakerFilter.bands[0]
+    band.filterType = .highPass
+    band.frequency = 100
+    band.bypass = false
+    updateSpeakerFilter()
+
+    // Tuned offline on the app's sounds: +7 dB on average playing, loudest chords stay under the ceiling.
+    let params = glue.auAudioUnit.parameterTree
+    params?.parameter(withAddress: 0)?.value = -24   // threshold dB
+    params?.parameter(withAddress: 1)?.value = 5     // headroom dB
+    params?.parameter(withAddress: 4)?.value = 0.01  // attack s
+    params?.parameter(withAddress: 5)?.value = 0.25  // release s
+    params?.parameter(withAddress: 6)?.value = 7     // make-up gain dB
+
+    reverb.auAudioUnit.parameterTree?.parameter(withAddress: 0)?.value = 100  // return is fully wet
+    setAmbience("hall")
   }
+
+  var glueEnabled: Bool {
+    get { !glue.bypass }
+    set { glue.bypass = !newValue }
+  }
+
+  var speakerProtectionEnabled: Bool {
+    get { speakerProtection }
+    set {
+      speakerProtection = newValue
+      updateSpeakerFilter()
+    }
+  }
+
+  private func updateSpeakerFilter() {
+    let builtIn = AVAudioSession.sharedInstance().currentRoute.outputs.contains { $0.portType == .builtInSpeaker }
+    speakerFilter.bypass = !(speakerProtection && builtIn)
+  }
+
+  /// Room of the shared reverb: "off", "room", "chamber", "hall", "plate", "cathedral".
+  func setAmbience(_ kind: String) {
+    let preset: String? = switch kind {
+    case "room": "Medium Room"
+    case "chamber": "Medium Chamber"
+    case "hall": "Medium Hall"
+    case "plate": "Plate"
+    case "cathedral": "Cathedral"
+    default: nil
+    }
+    guard let preset, let factory = reverb.auAudioUnit.factoryPresets?.first(where: { $0.name == preset }) else {
+      reverbBus.outputVolume = 0
+      reverb.bypass = true  // saves CPU when unused
+      return
+    }
+    reverb.auAudioUnit.currentPreset = factory
+    reverb.auAudioUnit.parameterTree?.parameter(withAddress: 0)?.value = 100
+    reverb.bypass = false
+    reverbBus.outputVolume = 1
+  }
+
+  /// Velocity response to the player's touch.
+  var velocityCurve: VelocityCurve = .normal
 
   var masterVolume: Float {
     get { engine.mainMixerNode.outputVolume }
@@ -130,7 +227,7 @@ final class MixerEngine {
       engine.attach(layer.strip)
       // Initial sampler has no configured preset yet and stays silent.
       try? wire(layer)
-      engine.connect(layer.strip, to: engine.mainMixerNode, format: nil)
+      connectStrip(layer)
       layer.midiBlock = layer.instrument.auAudioUnit.scheduleMIDIEventBlock
 
       let old: Layer? = lock.withLock {
@@ -216,7 +313,7 @@ final class MixerEngine {
 
   /// Loads a SoundFont preset; swaps the layer back to the built-in sampler if it hosted a plugin.
   /// `bank` is the SF2 bank number: 128 = percussion, anything else = melodic bank (GS variation).
-  func loadSoundFont(layerId: String, path: String, program: Int, bank: Int) throws {
+  func loadSoundFont(layerId: String, path: String, program: Int, bank: Int, gainDb: Double) throws {
     let layer = try self.layer(layerId)
     let url = path.hasPrefix("file://") ? URL(string: path)! : URL(fileURLWithPath: path)
     let isDrums = bank == 128
@@ -224,7 +321,8 @@ final class MixerEngine {
       url: url,
       program: UInt8(min(max(program, 0), 127)),
       bankMSB: UInt8(isDrums ? kAUSampler_DefaultPercussionBankMSB : kAUSampler_DefaultMelodicBankMSB),
-      bankLSB: UInt8(isDrums ? kAUSampler_DefaultBankLSB : min(max(bank, 0), 127))
+      bankLSB: UInt8(isDrums ? kAUSampler_DefaultBankLSB : min(max(bank, 0), 127)),
+      gainDb: Float(min(max(gainDb, -40), 12))
     )
     try graph.sync {
       try withMutedLayer(layer) {
@@ -455,6 +553,18 @@ final class MixerEngine {
     lock.withLock { layer.midiBlock = unit.auAudioUnit.scheduleMIDIEventBlock }
   }
 
+  /// Strip → main mix and → shared reverb (post-fader send; its level is set in applyMix).
+  private func connectStrip(_ layer: Layer) {
+    let mixer = engine.mainMixerNode
+    let format = mixer.outputFormat(forBus: 0)
+    let reverbIndex = reverbBus.nextAvailableInputBus
+    engine.connect(layer.strip, to: [
+      AVAudioConnectionPoint(node: mixer, bus: mixer.nextAvailableInputBus),
+      AVAudioConnectionPoint(node: reverbBus, bus: reverbIndex),
+    ], fromBus: 0, format: format)
+    layer.reverbBusIndex = reverbIndex
+  }
+
   private func detach(_ layer: Layer) {
     layer.meter.detach()
     unwire(layer)
@@ -476,6 +586,9 @@ final class MixerEngine {
         let audible = isActive(layer.id) ? isAudible(layer, anySolo: anySolo) : !layer.config.mute
         layer.strip.outputVolume = audible && layer.audioReady ? layer.config.volume : 0
         layer.strip.pan = layer.config.pan
+        if let bus = layer.reverbBusIndex {
+          layer.strip.destination(forMixer: reverbBus, bus: bus)?.volume = layer.config.reverbSend
+        }
       }
     }
   }
@@ -513,8 +626,9 @@ final class MixerEngine {
     }
   }
 
-  func noteOn(note: UInt8, velocity: UInt8, channel: UInt8) {
+  func noteOn(note: UInt8, velocity rawVelocity: UInt8, channel: UInt8) {
     let key = Int(channel) << 7 | Int(note)
+    let velocity = velocityCurve.apply(rawVelocity)
     let accepted = lock.withLock { () -> Bool in
       // Same keyboard on USB and Bluetooth: drop the doubled note-on instead of re-attacking.
       guard duplicates.accept(key: key, held: activeNotes[key] != nil, now: CACurrentMediaTime()) else { return false }
@@ -699,28 +813,54 @@ final class MixerEngine {
     ]
   }
 
+  /// Two taps: before the limiter (to show how much it works) and on the real output. Every buffer is
+  /// scanned and peaks are held until the next report, so short peaks are never skipped.
   private func installMeter() {
-    let mixer = engine.mainMixerNode
+    // "Before the limiter" = glue output (the limiter's input).
+    let mixer = glue
     mixer.removeTap(onBus: 0)
+    ceiling.removeTap(onBus: 0)
     mixer.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
-      guard let self, let onLevel = self.onLevel else { return }
-      let now = CACurrentMediaTime()
-      guard now - self.lastLevelTime >= 1.0 / 30 else { return }
-      self.lastLevelTime = now
-
-      var peak: Float = 0
-      if let data = buffer.floatChannelData {
-        for ch in 0..<Int(buffer.format.channelCount) {
-          for i in 0..<Int(buffer.frameLength) { peak = max(peak, abs(data[ch][i])) }
-        }
-      }
-      onLevel(peak)
+      guard let self else { return }
+      let peak = Self.peak(of: buffer)
+      self.lock.withLock { self.meterPre = max(self.meterPre, peak) }
     }
+    ceiling.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+      guard let self, let onLevel = self.onLevel else { return }
+      let peak = Self.peak(of: buffer)
+      let report: (Float, Float)? = self.lock.withLock {
+        self.meterPost = max(self.meterPost, peak)
+        let now = CACurrentMediaTime()
+        guard now - self.lastLevelTime >= 1.0 / 30 else { return nil }
+        self.lastLevelTime = now
+        // The limiter acts on what exceeds full scale at its input. Measured on that single tap,
+        // so the two taps' report windows (which never line up exactly) cannot fake a reduction.
+        let reduction = self.limiter.bypass || self.meterPre <= 1 ? 0 : 20 * log10(self.meterPre)
+        defer { self.meterPre = 0; self.meterPost = 0 }
+        return (self.meterPost, reduction)
+      }
+      if let report { onLevel(report.0, report.1) }
+    }
+  }
+
+  private static func peak(of buffer: AVAudioPCMBuffer) -> Float {
+    var peak: Float = 0
+    if let data = buffer.floatChannelData {
+      for ch in 0..<Int(buffer.format.channelCount) {
+        for i in 0..<Int(buffer.frameLength) { peak = max(peak, abs(data[ch][i])) }
+      }
+    }
+    return peak
   }
 
   private func observeSystemEvents() {
     guard observers.isEmpty else { return }
     let center = NotificationCenter.default
+
+    // Headphones / interface plugged or unplugged: the speaker filter only applies to built-in speakers.
+    observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
+      self?.updateSpeakerFilter()
+    })
 
     // Phone call / Siri: restart once the interruption ends.
     observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in

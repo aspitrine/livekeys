@@ -27,8 +27,8 @@ public class AudioEngineModule: Module {
       self.bleMidi.onChange = { [weak self] devices in
         self?.sendEvent("onBluetoothMidiChanged", ["devices": devices])
       }
-      self.mixer.onLevel = { [weak self] peak in
-        self?.sendEvent("onLevel", ["peak": peak])
+      self.mixer.onLevel = { [weak self] peak, reduction in
+        self?.sendEvent("onLevel", ["peak": peak, "reductionDb": reduction])
       }
     }
 
@@ -56,6 +56,12 @@ public class AudioEngineModule: Module {
     Function("getPerformance") { self.mixer.performance() }
 
     Function("setLimiterEnabled") { (enabled: Bool) in self.mixer.limiterEnabled = enabled }
+
+    /// Master sound: bus compression, built-in speaker protection, shared reverb room, velocity curve.
+    Function("setGlueEnabled") { (enabled: Bool) in self.mixer.glueEnabled = enabled }
+    Function("setSpeakerProtection") { (enabled: Bool) in self.mixer.speakerProtectionEnabled = enabled }
+    Function("setAmbience") { (kind: String) in self.mixer.setAmbience(kind) }
+    Function("setVelocityCurve") { (curve: String) in self.mixer.velocityCurve = VelocityCurve(rawValue: curve) ?? .normal }
 
     /// Presents the system Bluetooth MIDI pairing screen.
     AsyncFunction("showBluetoothMidi") {
@@ -98,8 +104,8 @@ public class AudioEngineModule: Module {
       self.mixer.removeLayer(id: id)
     }
 
-    AsyncFunction("loadSoundFont") { (layerId: String, path: String, program: Int, bank: Int) in
-      try self.mixer.loadSoundFont(layerId: layerId, path: path, program: program, bank: bank)
+    AsyncFunction("loadSoundFont") { (layerId: String, path: String, program: Int, bank: Int, gainDb: Double) in
+      try self.mixer.loadSoundFont(layerId: layerId, path: path, program: program, bank: bank, gainDb: gainDb)
     }
 
     AsyncFunction("getSoundFontPresets") { (path: String) -> [[String: Any]] in

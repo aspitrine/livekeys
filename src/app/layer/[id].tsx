@@ -238,6 +238,19 @@ export default function LayerEditor() {
 
         <Section title="Mix">
           <View style={styles.row}>
+            <Text style={styles.label}>Réverbe</Text>
+            <Slider
+              style={styles.flex}
+              value={layer.reverbSend ?? 0}
+              onValueChange={(reverbSend) => update({ reverbSend: Math.round(reverbSend * 100) / 100 })}
+              minimumTrackTintColor={layer.color}
+            />
+            <Text style={styles.value}>{Math.round((layer.reverbSend ?? 0) * 100)} %</Text>
+          </View>
+          <Text style={styles.hint}>
+            Envoi vers l’ambiance commune (Réglages › Son). Évite d’y ajouter en plus une réverbe en effet.
+          </Text>
+          <View style={styles.row}>
             <Text style={styles.label}>Pan</Text>
             <Slider
               style={styles.flex}

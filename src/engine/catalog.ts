@@ -1,5 +1,6 @@
 import AudioEngine from '../../modules/audio-engine';
 import { LIBRARY } from '../model/library';
+import soundLevels from '../model/soundLevels.json';
 import type { SoundRef } from '../model/types';
 import { bankFile } from './bankFiles';
 
@@ -58,3 +59,9 @@ export function loadCatalog(): Promise<SoundRef[]> {
 }
 
 export const soundKey = (s: SoundRef) => `${s.bank}/${s.bankNumber}/${s.program}`;
+
+/**
+ * Level correction for a preset (dB), measured offline by scripts/measure-levels.swift so every
+ * sound plays at a comparable loudness and none drives the limiter on its own. Unknown presets: 0.
+ */
+export const soundGainDb = (s: SoundRef) => (soundLevels as Record<string, number>)[soundKey(s)] ?? 0;

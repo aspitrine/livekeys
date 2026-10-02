@@ -17,7 +17,19 @@ export const DEFAULT_LAYER_CONFIG: LayerConfig = {
   transpose: 0,
   midiChannel: -1,
   sustainEnabled: true,
+  reverbSend: 0.2,
 };
+
+/** Pads sit further back in the room. */
+export const PAD_REVERB_SEND = 0.35;
+
+/** Default send for a layer: none if it already has its own reverb insert (no double reverb). */
+export const defaultReverbSend = (layer: Pick<LayerDef, 'pad' | 'effects'>) =>
+  layer.effects.some((e) => e.plugin.componentId === 'aufx:rvb2:appl')
+    ? 0
+    : layer.pad
+      ? PAD_REVERB_SEND
+      : DEFAULT_LAYER_CONFIG.reverbSend;
 
 export function makeLayer(sound: SoundRef, index: number, config: Partial<LayerConfig> = {}): LayerDef {
   return {
@@ -34,7 +46,7 @@ export function makeLayer(sound: SoundRef, index: number, config: Partial<LayerC
 /** A chord pad following the keyboard, on a warm pad sound. */
 export function makePadLayer(index: number): LayerDef {
   return {
-    ...makeLayer(SOUNDS.warmPad, index, { volume: 0.1 }),
+    ...makeLayer(SOUNDS.warmPad, index, { volume: 0.1, reverbSend: PAD_REVERB_SEND }),
     name: 'Pad',
     pad: { mode: 'follow', chord: { root: 0, quality: 'maj' }, base: 48, playing: true },
   };

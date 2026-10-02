@@ -1,6 +1,7 @@
 import { NativeModule, requireNativeModule } from 'expo';
 
 import type {
+  Ambience,
   AudioEngineModuleEvents,
   BluetoothMidiDevice,
   BundledSoundFont,
@@ -15,6 +16,7 @@ import type {
   PluginPreset,
   PluginSlot,
   SoundFontPreset,
+  VelocityCurveKind,
 } from './AudioEngine.types';
 
 declare class AudioEngineModule extends NativeModule<AudioEngineModuleEvents> {
@@ -26,6 +28,13 @@ declare class AudioEngineModule extends NativeModule<AudioEngineModuleEvents> {
   /** Load figures since the previous call. */
   getPerformance(): PerformanceInfo;
   setLimiterEnabled(enabled: boolean): void;
+  /** Gentle bus compression: louder average level, peaks held before the limiter. */
+  setGlueEnabled(enabled: boolean): void;
+  /** High-pass on the built-in speakers only (they distort on deep bass). */
+  setSpeakerProtection(enabled: boolean): void;
+  /** Room of the shared reverb every layer sends to. */
+  setAmbience(kind: Ambience): void;
+  setVelocityCurve(curve: VelocityCurveKind): void;
   showBluetoothMidi(): Promise<void>;
   /** BLE MIDI keyboards currently connected to the device. */
   getConnectedBluetoothMidi(): BluetoothMidiDevice[];
@@ -45,7 +54,7 @@ declare class AudioEngineModule extends NativeModule<AudioEngineModuleEvents> {
    * `path`: local file path or file:// URI to an .sf2/.dls file.
    * `bank`: SF2 bank number (0 = melodic, 1...127 = variations, 128 = drum kits).
    */
-  loadSoundFont(layerId: string, path: string, program: number, bank: number): Promise<void>;
+  loadSoundFont(layerId: string, path: string, program: number, bank: number, gainDb: number): Promise<void>;
   /** Lists the presets of an .sf2 file, sorted by bank then program. */
   getSoundFontPresets(path: string): Promise<SoundFontPreset[]>;
 

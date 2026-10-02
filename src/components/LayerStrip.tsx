@@ -1,3 +1,4 @@
+import Slider from '@react-native-community/slider';
 import { router } from 'expo-router';
 import { ActionSheetIOS, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -8,6 +9,7 @@ import { colors } from '../theme';
 import { Button } from './Button';
 import { EffectSlots, InstrumentSlot } from './EffectSlots';
 import { Fader } from './Fader';
+import { Icon } from './Icon';
 
 /** Mixer channel strip for one layer: name, sound, range, fader, mute/solo, insert effects. */
 /** `fxRows`: Audio FX rows to reserve, same for every strip of the patch. */
@@ -45,6 +47,19 @@ export function LayerStrip({ layer, fxRows }: { layer: LayerDef; fxRows: number 
 
       <InstrumentSlot layer={layer} />
       <EffectSlots layer={layer} rows={fxRows} />
+
+      {/* Send to the shared room (Réglages › Son › Ambiance), like an aux knob on a desk. */}
+      <View style={styles.send}>
+        <Icon name="building.columns" size={11} color={colors.textMuted} />
+        <Slider
+          style={styles.sendSlider}
+          value={layer.reverbSend ?? 0}
+          onValueChange={(reverbSend) => update({ reverbSend: Math.round(reverbSend * 100) / 100 })}
+          minimumTrackTintColor={layer.color}
+          maximumTrackTintColor={colors.control}
+          accessibilityLabel="Réverbe"
+        />
+      </View>
 
       <Fader value={layer.volume} onChange={(volume) => update({ volume })} color={layer.color} />
       <Text style={styles.volume}>{Math.round(layer.volume * 100)}</Text>
@@ -85,6 +100,8 @@ const styles = StyleSheet.create({
   name: { color: colors.text, fontSize: 15, fontWeight: '600' },
   meta: { color: colors.textMuted, fontSize: 12 },
   volume: { color: colors.textDim, fontVariant: ['tabular-nums'] },
+  send: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'stretch', height: 24 },
+  sendSlider: { flex: 1, height: 24 },
   row: { flexDirection: 'row', gap: 6, alignSelf: 'stretch' },
   flex: { flex: 1 },
 });

@@ -4,19 +4,24 @@ import { StyleSheet, View } from 'react-native';
 import AudioEngine from '../../modules/audio-engine';
 import { colors } from '../theme';
 
-/** Master peak meter fed by the native tap (~30 Hz). */
+/** Output ceiling of the engine (−1 dBFS): a full bar means the output is at its maximum. */
+const CEILING = 0.891;
+
+/** Colour from what the limiter is taking off: none, a little (fine), a lot (too loud, it squashes). */
+export const reductionColor = (db: number) => (db > 6 ? colors.danger : db > 1 ? colors.warning : colors.success);
+
+/** Real output peak (after limiter), ~30 Hz. Coloured by how hard the limiter works. */
 export function LevelMeter() {
-  const [peak, setPeak] = useState(0);
+  const [level, setLevel] = useState({ peak: 0, reductionDb: 0 });
   useEffect(() => {
-    const sub = AudioEngine.addListener('onLevel', (e) => setPeak(e.peak));
+    const sub = AudioEngine.addListener('onLevel', (e) => setLevel(e));
     return () => sub.remove();
   }, []);
 
-  const pct = Math.min(peak, 1) * 100;
-  const color = peak > 0.95 ? colors.danger : peak > 0.7 ? colors.warning : colors.success;
+  const pct = Math.min(level.peak / CEILING, 1) * 100;
   return (
     <View style={styles.track}>
-      <View style={[styles.fill, { width: `${pct}%`, backgroundColor: color }]} />
+      <View style={[styles.fill, { width: `${pct}%`, backgroundColor: reductionColor(level.reductionDb) }]} />
     </View>
   );
 }

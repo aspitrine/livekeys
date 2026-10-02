@@ -72,7 +72,8 @@ const preset = (
 
 // Parameter addresses checked against the Apple units (see scripts in the repo history):
 // AUReverb2 0 = dry/wet %, AUDelay 0 = wet %, 1 = time s, 2 = feedback %, 3 = low-pass Hz,
-// shelf / pass filters 0 = frequency Hz, 1 = gain dB (resonance for pass filters).
+// shelf / pass filters 0 = frequency Hz, 1 = gain dB (resonance for pass filters),
+// AUDynamicsProcessor 6 = master (make-up) gain dB, set to give back the level the compression takes.
 export const EFFECT_PRESETS: EffectPreset[] = [
   preset('rv-small', 'reverb', 'Petite pièce', 'Ambiance courte et discrète', REVERB, {
     preset: 'Small Room',
@@ -128,9 +129,18 @@ export const EFFECT_PRESETS: EffectPreset[] = [
     params: { 0: 2500, 1: 6 },
   }),
 
-  preset('dy-light', 'dynamics', 'Compresseur léger', 'Égalise un peu les nuances', DYNAMICS, { preset: 'Light' }),
-  preset('dy-smooth', 'dynamics', 'Compresseur', 'Rapide et transparent', DYNAMICS, { preset: 'Fast and Smooth' }),
-  preset('dy-hard', 'dynamics', 'Compresseur fort', 'Son très tenu, nuances écrasées', DYNAMICS, { preset: 'Hard' }),
+  preset('dy-light', 'dynamics', 'Compresseur léger', 'Égalise un peu les nuances', DYNAMICS, {
+    preset: 'Light',
+    params: { 6: 4 },
+  }),
+  preset('dy-smooth', 'dynamics', 'Compresseur', 'Rapide et transparent', DYNAMICS, {
+    preset: 'Fast and Smooth',
+    params: { 6: 5 },
+  }),
+  preset('dy-hard', 'dynamics', 'Compresseur fort', 'Son très tenu, nuances écrasées', DYNAMICS, {
+    preset: 'Hard',
+    params: { 6: 7 },
+  }),
 
   preset('ds-overdrive', 'distortion', 'Overdrive', 'Saturation funky, pour orgue et Rhodes', DISTORTION, {
     preset: 'Multi- Distorted Funk',

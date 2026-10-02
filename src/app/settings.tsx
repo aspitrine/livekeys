@@ -1,13 +1,28 @@
 import { router } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
-import AudioEngine from '../../modules/audio-engine';
+import AudioEngine, { type Ambience, type VelocityCurveKind } from '../../modules/audio-engine';
 import { Button } from '../components/Button';
 import { MAPPABLE_TARGETS, cancelLearn, sameTarget, startLearn, targetLabel, useMidiLearn } from '../engine/controls';
 import { useEngineStatus } from '../engine/boot';
 import { exportConcert, pickConcert } from '../lib/concertFile';
 import { useConcert } from '../store/concert';
 import { colors } from '../theme';
+
+const AMBIENCES: { id: Ambience; label: string }[] = [
+  { id: 'off', label: 'Aucune' },
+  { id: 'room', label: 'Pièce' },
+  { id: 'chamber', label: 'Chambre' },
+  { id: 'hall', label: 'Salle' },
+  { id: 'plate', label: 'Plate' },
+  { id: 'cathedral', label: 'Cathédrale' },
+];
+
+const CURVES: { id: VelocityCurveKind; label: string }[] = [
+  { id: 'light', label: 'Léger' },
+  { id: 'normal', label: 'Normal' },
+  { id: 'heavy', label: 'Dur' },
+];
 
 export default function SettingsScreen() {
   const concert = useConcert((s) => s.concert);
@@ -65,6 +80,49 @@ export default function SettingsScreen() {
         })}
       </Section>
 
+      <Section title="Son">
+        <Toggle
+          label="Compression douce du master"
+          hint="Son plus homogène et plus présent : les passages doux sont remontés, les crêtes tenues."
+          value={settings.glue}
+          onChange={(v) => setSetting('glue', v)}
+        />
+        <Toggle
+          label="Protection des haut-parleurs de l’iPad"
+          hint="Coupe les basses profondes que les haut-parleurs intégrés ne peuvent pas reproduire (évite la saturation). Sans effet au casque ou sur une carte son."
+          value={settings.speakerProtection}
+          onChange={(v) => setSetting('speakerProtection', v)}
+        />
+        <View style={styles.row}>
+          <Text style={[styles.label, styles.flex]}>Ambiance (réverbe commune)</Text>
+        </View>
+        <View style={styles.chips}>
+          {AMBIENCES.map((a) => (
+            <Button
+              key={a.id}
+              label={a.label}
+              active={settings.ambience === a.id}
+              onPress={() => setSetting('ambience', a.id)}
+            />
+          ))}
+        </View>
+        <Text style={styles.hint}>Chaque layer y envoie plus ou moins de son avec son réglage « Réverbe ».</Text>
+        <View style={styles.row}>
+          <Text style={[styles.label, styles.flex]}>Toucher du clavier</Text>
+        </View>
+        <View style={styles.chips}>
+          {CURVES.map((c) => (
+            <Button
+              key={c.id}
+              label={c.label}
+              active={settings.velocityCurve === c.id}
+              onPress={() => setSetting('velocityCurve', c.id)}
+            />
+          ))}
+        </View>
+        <Text style={styles.hint}>Léger : sonne fort sans forcer. Dur : il faut appuyer plus pour jouer fort.</Text>
+      </Section>
+
       <Section title="Performance">
         <Toggle
           label="Précharger les patches voisins"
@@ -74,7 +132,7 @@ export default function SettingsScreen() {
         />
         <Toggle
           label="Limiteur sur la sortie"
-          hint="Évite la saturation quand plusieurs layers jouent fort."
+          hint="Évite la saturation quand plusieurs layers jouent fort. Sans lui, les accords forts peuvent saturer et craquer : à laisser activé en live."
           value={settings.limiter}
           onChange={(v) => setSetting('limiter', v)}
         />
@@ -209,6 +267,7 @@ const styles = StyleSheet.create({
   label: { color: colors.textDim, fontSize: 15 },
   value: { color: colors.text, fontVariant: ['tabular-nums'], minWidth: 130, textAlign: 'right' },
   hint: { color: colors.textMuted, fontSize: 13 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   dot: { width: 10, height: 10, borderRadius: 5 },
   input: { color: colors.text, fontSize: 16, backgroundColor: colors.control, borderRadius: 8, padding: 10 },
 });

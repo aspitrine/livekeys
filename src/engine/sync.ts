@@ -1,7 +1,7 @@
 import AudioEngine, { type LayerConfig } from '../../modules/audio-engine';
 import type { EffectDef, LayerDef, Patch, PluginRef } from '../model/types';
 import { useConcert } from '../store/concert';
-import { bankPath, soundKey } from './catalog';
+import { bankPath, soundGainDb, soundKey } from './catalog';
 
 type Loaded = {
   config: LayerConfig;
@@ -28,6 +28,7 @@ const CONFIG_KEYS: (keyof LayerConfig)[] = [
   'midiChannel',
   'sustainEnabled',
   'keyboard',
+  'reverbSend',
 ];
 
 /** Pads use a squared gain curve for finer control at low levels; keyboard layers keep linear gain. */
@@ -186,6 +187,7 @@ async function applyLayer(layer: LayerDef) {
         bankPath(layer.sound.bank),
         layer.sound.program,
         layer.sound.bankNumber,
+        soundGainDb(layer.sound),
       );
     current.instrument = instrument;
   }

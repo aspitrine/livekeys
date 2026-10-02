@@ -6,6 +6,8 @@ struct SamplerPreset {
   let program: UInt8
   let bankMSB: UInt8
   let bankLSB: UInt8
+  /// Level correction (dB) so every preset plays at a comparable loudness.
+  var gainDb: Float = 0
 }
 
 /// One inserted effect, keyed by the id JS gave it.
@@ -28,6 +30,8 @@ final class Layer {
   var instrument: AVAudioUnit = AVAudioUnitSampler()
   var effects: [EffectSlot] = []
   let strip = AVAudioMixerNode()
+  /// Input bus of this layer's send on the shared reverb.
+  var reverbBusIndex: AVAudioNodeBus?
   /// What the sampler plays. AVAudioUnitSampler falls back to its default sine sound whenever it is
   /// reconnected or the engine restarts, so the preset is reloaded after each of those.
   var samplerPreset: SamplerPreset?
@@ -51,8 +55,10 @@ final class Layer {
   /// Reloads the sampler preset (no-op for AUv3 instruments).
   func reloadSamplerPreset() throws {
     guard let sampler, let p = samplerPreset else { return }
-    try AudioSafety.reloadSamplers([sampler] + (padVoices.map { [$0.second] } ?? []), strip: strip,
+    let voices = [sampler] + (padVoices.map { [$0.second] } ?? [])
+    try AudioSafety.reloadSamplers(voices, strip: strip,
       url: p.url, program: p.program, bankMSB: p.bankMSB, bankLSB: p.bankLSB)
+    for voice in voices { voice.overallGain = p.gainDb }
   }
 
   /// Audio chain in signal order, strip excluded.

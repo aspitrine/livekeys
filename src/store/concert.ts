@@ -1,7 +1,8 @@
+import type { Ambience, VelocityCurveKind } from '../../modules/audio-engine';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { defaultConcert, makeLayer, makePadLayer, makePatch } from '../model/defaults';
+import { defaultConcert, defaultReverbSend, makeLayer, makePadLayer, makePatch } from '../model/defaults';
 import { SOUNDS } from '../model/sounds';
 import type { Concert, EffectDef, LayerDef, MidiMapping, Patch, PluginRef, SetList, SoundRef } from '../model/types';
 import { newId } from '../lib/id';
@@ -12,6 +13,13 @@ export type Settings = {
   preloadNeighbors: boolean;
   /** Safety limiter on the master output. */
   limiter: boolean;
+  /** Gentle master compression: louder, more even sound. */
+  glue: boolean;
+  /** High-pass on the iPad's own speakers (they distort on deep bass). */
+  speakerProtection: boolean;
+  /** Room of the shared reverb. */
+  ambience: Ambience;
+  velocityCurve: VelocityCurveKind;
   /** Reconnect remembered Bluetooth MIDI keyboards automatically. */
   bluetoothAutoReconnect: boolean;
   /** Bluetooth MIDI keyboards seen connected at least once. */
@@ -21,6 +29,10 @@ export type Settings = {
 const DEFAULT_SETTINGS: Settings = {
   preloadNeighbors: true,
   limiter: true,
+  glue: true,
+  speakerProtection: true,
+  ambience: 'hall',
+  velocityCurve: 'normal',
   bluetoothAutoReconnect: true,
   bluetoothDevices: [],
 };
@@ -273,14 +285,17 @@ export const useConcert = create<ConcertState>()(
     }),
     {
       name: 'livekeys-concert',
-      version: 4,
+      version: 5,
       migrate: (persisted, version) => {
         const state = persisted as { concert: Concert };
         // v1 layers had no effects list.
         if (version < 2) state.concert = mapLayers(state.concert, (l) => ({ ...l, effects: l.effects ?? [] }));
         // v2 concerts had no MIDI mappings.
         if (version < 3) state.concert = { ...state.concert, mappings: state.concert.mappings ?? [] };
-        // v4 added Bluetooth settings: fill any missing setting with its default.
+        // v5 added the shared reverb: give existing layers a sensible send.
+        if (version < 5)
+          state.concert = mapLayers(state.concert, (l) => ({ ...l, reverbSend: l.reverbSend ?? defaultReverbSend(l) }));
+        // v4 / v5 added settings: fill any missing setting with its default.
         const withSettings = state as { settings?: Partial<Settings> };
         withSettings.settings = { ...DEFAULT_SETTINGS, ...withSettings.settings };
         return state as never;

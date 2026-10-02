@@ -125,3 +125,33 @@ test('one controller mapping replaces the previous mapping on the same channel',
   store.removeMapping(useConcert.getState().concert.mappings[0].id);
   expect(useConcert.getState().concert.mappings).toEqual([]);
 });
+
+test('older concerts get a reverb send, except layers that already have their own reverb insert', () => {
+  const migrate = useConcert.persist.getOptions().migrate!;
+  const concert = useConcert.getState().concert;
+  const [first] = concert.sets[0].patches;
+  const plain = { ...first.layers[0], reverbSend: undefined, effects: [] };
+  const withHall = {
+    ...first.layers[0],
+    id: 'with-hall',
+    reverbSend: undefined,
+    effects: [
+      { id: 'fx', bypass: false, plugin: { componentId: 'aufx:rvb2:appl', name: 'Hall', manufacturer: 'Apple' } },
+    ],
+  };
+  const pad = {
+    ...first.layers[0],
+    id: 'pad',
+    reverbSend: undefined,
+    effects: [],
+    pad: { mode: 'follow', chord: { root: 0, quality: 'maj' }, base: 48, playing: true },
+  };
+  const old = {
+    concert: { ...concert, sets: [{ ...concert.sets[0], patches: [{ ...first, layers: [plain, withHall, pad] }] }] },
+  };
+  const migrated = migrate(old, 4) as { concert: typeof concert; settings: { ambience: string; glue: boolean } };
+  const layers = migrated.concert.sets[0].patches[0].layers;
+  expect(layers.map((l) => l.reverbSend)).toEqual([0.2, 0, 0.35]);
+  expect(migrated.settings.ambience).toBe('hall');
+  expect(migrated.settings.glue).toBe(true);
+});
