@@ -1,0 +1,21 @@
+appId: net.eliakim.livekeys
+name: Patch navigation and stage mode
+---
+- runFlow: ../helpers/launch.yaml
+- assertVisible: 'Mon concert'
+- assertVisible: 'Ensuite : Piano [+] Pad'
+- tapOn: 'Patch suivant'
+- assertVisible: 'Ensuite : Basse / EP'
+- tapOn:
+    id: 'split-keyboard'
+- tapOn: 'Mode scène'
+- assertVisible: '.*PANIC'
+- tapOn: '.*Quitter'
+- assertVisible: 'Ensuite : Basse / EP'
+- tapOn: 'Patch précédent'
+- assertVisible: 'Ensuite : Piano [+] Pad'
+- tapOn: 'Instrument : Upright piano KW'
+- tapOn: '.*Cordes,.*'
+- tapOn: 'Fast Strings, GeneralUser GS.*'
+- tapOn: '.*Terminé'
+- assertVisible: 'Instrument : Fast Strings'

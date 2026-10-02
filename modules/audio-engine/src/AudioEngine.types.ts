@@ -103,5 +103,7 @@ export type AudioEngineModuleEvents = {
   onMidiEvent: (event: MidiEvent) => void;
   onMidiSourcesChanged: (event: { sources: MidiSource[] }) => void;
   onLevel: (event: { peak: number }) => void;
+  /** Audio came back after an interruption (call, Siri) or a route change. */
+  onEngineRestarted: () => void;
   onBluetoothMidiChanged: (event: { devices: BluetoothMidiDevice[] }) => void;
 };

@@ -8,20 +8,6 @@ struct SamplerPreset {
   let bankLSB: UInt8
 }
 
-/// Chord pads play on two identical sampler voices mixed together, so a chord change can
-/// crossfade (new chord fades in on one voice while the old one fades out on the other)
-/// instead of cutting notes. Voice 0 is the layer's instrument, voice 1 is `second`.
-final class PadVoices {
-  let second = AVAudioUnitSampler()
-  let mixer = AVAudioMixerNode()
-  /// Notes held by each voice.
-  var notes: [Set<UInt8>] = [[], []]
-  var active = 0
-  /// Bumped on every chord change, so a finished fade knows if it is still current.
-  var generation = 0
-  var fade: DispatchSourceTimer?
-}
-
 /// One inserted effect, keyed by the id JS gave it.
 struct EffectSlot {
   let id: String
@@ -34,6 +20,11 @@ struct EffectSlot {
 final class Layer {
   let id: String
   var config = LayerConfig()
+  /// Under the engine lock. Failed / unfinished loads must never play a default preset.
+  var audioReady = false
+  /// Fading out (before removal or a reload): the mix leaves its volume alone.
+  var fading = false
+  var sustain = SustainState()
   var instrument: AVAudioUnit = AVAudioUnitSampler()
   var effects: [EffectSlot] = []
   let strip = AVAudioMixerNode()
@@ -52,6 +43,7 @@ final class Layer {
 
   init(id: String) {
     self.id = id
+    strip.outputVolume = 0
   }
 
   var sampler: AVAudioUnitSampler? { instrument as? AVAudioUnitSampler }
@@ -59,8 +51,8 @@ final class Layer {
   /// Reloads the sampler preset (no-op for AUv3 instruments).
   func reloadSamplerPreset() throws {
     guard let sampler, let p = samplerPreset else { return }
-    try sampler.loadSoundBankInstrument(at: p.url, program: p.program, bankMSB: p.bankMSB, bankLSB: p.bankLSB)
-    try padVoices?.second.loadSoundBankInstrument(at: p.url, program: p.program, bankMSB: p.bankMSB, bankLSB: p.bankLSB)
+    try AudioSafety.reloadSamplers([sampler] + (padVoices.map { [$0.second] } ?? []), strip: strip,
+      url: p.url, program: p.program, bankMSB: p.bankMSB, bankLSB: p.bankLSB)
   }
 
   /// Audio chain in signal order, strip excluded.
@@ -74,14 +66,7 @@ final class Layer {
 
   /// Raw MIDI to any unit of this layer (pad voices).
   static func send(to unit: AVAudioUnit, _ status: UInt8, _ d1: UInt8, _ d2: UInt8 = 0) {
-    if let block = unit.auAudioUnit.scheduleMIDIEventBlock {
-      var bytes = (status, d1, d2)
-      withUnsafeBytes(of: &bytes) { raw in
-        block(AUEventSampleTimeImmediate, 0, 3, raw.bindMemory(to: UInt8.self).baseAddress!)
-      }
-    } else if let midi = unit as? AVAudioUnitMIDIInstrument {
-      midi.sendMIDIEvent(status, data1: d1, data2: d2)
-    }
+    AudioSafety.send(to: unit, status, d1, d2)
   }
 
   /// `"instrument"` or an effect id → the AU behind it.

@@ -1,8 +1,11 @@
+import { useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '../components/Button';
 import { Icon } from '../components/Icon';
 import { useEngineStatus } from '../engine/boot';
+import { captureAudioDiagnostic } from '../engine/diagnostics';
 import { LOAD_COLORS, loadLevel, usePerformance } from '../engine/performance';
 import { instrumentName } from '../model/defaults';
 import { selectCurrentPatch, useConcert } from '../store/concert';
@@ -12,6 +15,20 @@ const colorFor = (percent: number) => LOAD_COLORS[loadLevel(percent)];
 
 /** Live load of the audio engine: whole graph, per layer of the current patch, CPU and memory. */
 export default function PerformanceScreen() {
+  const { capture } = useLocalSearchParams<{ capture?: string }>();
+  const [capturing, setCapturing] = useState(false);
+  const [captureMessage, setCaptureMessage] = useState('');
+  const startCapture = useCallback(() => {
+    setCapturing(true);
+    setCaptureMessage('Laisse le son résonner pendant la capture.');
+    captureAudioDiagnostic()
+      .then(() => setCaptureMessage('Diagnostic enregistré.'))
+      .catch((error) => setCaptureMessage(`Échec du diagnostic : ${String(error)}`))
+      .finally(() => setCapturing(false));
+  }, []);
+  useEffect(() => {
+    if (__DEV__ && capture === '1') startCapture();
+  }, [capture, startCapture]);
   const { current, history, overloads, resetOverloads } = usePerformance();
   const info = useEngineStatus((s) => s.info);
   const patch = useConcert(selectCurrentPatch);
@@ -24,6 +41,18 @@ export default function PerformanceScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      <Card title="Diagnostic audio" icon="waveform">
+        <Button
+          label={capturing ? 'Capture en cours (30 s)' : 'Capturer 30 secondes'}
+          icon="waveform"
+          variant="primary"
+          disabled={capturing}
+          onPress={startCapture}
+        />
+        <Text style={styles.hint}>
+          {captureMessage || 'Relève les pics de volume, le MIDI et la charge audio dans un fichier local.'}
+        </Text>
+      </Card>
       <View style={styles.cards}>
         <Card title="Charge audio (DSP)" icon="cpu">
           <Text style={[styles.big, { color: colorFor(load) }]}>{Math.round(load)} %</Text>

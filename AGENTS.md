@@ -15,13 +15,36 @@ Use `bunx` instead of `npx` if the project uses bun (`bun.lock` present).
 ```bash
 npx expo install <package>  # ALWAYS use instead of npm/yarn/pnpm/bun add — resolves SDK-compatible versions
 npx expo start              # start the dev server
-npx expo lint               # lint
-npx tsc --noEmit            # typecheck
+npm run lint               # Oxlint (do not use expo lint / ESLint)
+npm run format             # Oxfmt (Oxlint is the linter, not the formatter)
+npm run typecheck          # TypeScript, including tests
+npm run check              # formatting, lint, types, tests and coverage
+npm run test:native        # actual Apple sampler PCM + concurrency tests with Thread Sanitizer (macOS)
+npm run check:all          # all checks, including native iOS E2E
 npx expo-doctor             # diagnose dependency and config issues
 npx expo install --fix      # fix incompatible package versions
 ```
 
-Run lint and typecheck before declaring any task done.
+## Mandatory checks after every feature or bug fix
+
+- Add or update meaningful unit/integration tests for changed behavior, and a regression test for every bug fix.
+- Keep tests under `tests/`, never inside `src/app/`. Use Jest with `jest-expo` and React Native Testing Library.
+- Mock native boundaries only; exercise real store/engine logic. Do not claim JS mocks validate actual audio or Bluetooth.
+- Native audio regressions live in `tests/native/` and exercise the production Swift/C++ safety code through SwiftPM.
+  `npm run test:native` uses real Apple samplers with offline PCM rendering and Thread Sanitizer. This is a macOS test,
+  not verification of iPad speakers, real-time deadlines or AUv3 plugins. Do not add a mutex/allocation to render callbacks.
+- Run `npm run format`, then `npm run check:all` after each completed feature or fix. Fix failures and rerun affected checks.
+- `npm run check` enforces Oxfmt, Oxlint, TypeScript and unit/integration coverage thresholds. Do not bypass these checks,
+  lower coverage thresholds to hide a regression, or leave focused/skipped tests.
+- Run and extend `.maestro/flows/` for affected user journeys. The E2E runner requires a current app build on a dedicated
+  iOS simulator and clears that simulator's LiveKeys data. Never run reset flows on the user's physical iPad.
+- For Swift, audio graph, MIDI/Bluetooth, native dependencies or config changes, also verify a native build and perform
+  a real audio/MIDI smoke test; JavaScript tests do not cover these systems.
+- If a required runtime, simulator, native build or service is unavailable, finish the checks that can run and explicitly
+  report the exact blocked command and prerequisite. Never describe an unexecuted or blocked check as passing.
+- Summarize the commands/results and any remaining limitations in the final response.
+
+See `docs/TESTING.md` for commands, coverage scope, native E2E prerequisites and the manual EAS workflow.
 
 ## Navigation & Routing
 

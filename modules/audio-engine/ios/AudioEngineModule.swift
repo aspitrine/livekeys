@@ -9,10 +9,12 @@ public class AudioEngineModule: Module {
   public func definition() -> ModuleDefinition {
     Name("AudioEngine")
 
-    Events("onMidiEvent", "onMidiSourcesChanged", "onLevel", "onBluetoothMidiChanged")
+    Events("onMidiEvent", "onMidiSourcesChanged", "onLevel", "onBluetoothMidiChanged", "onEngineRestarted")
 
     OnCreate {
       self.midi.onMessage = { [weak self] message in self?.mixer.handle(message) }
+      self.midi.onSourceRemoved = { [weak self] in self?.mixer.releaseKeyboard() }
+      self.mixer.onRestarted = { [weak self] in self?.sendEvent("onEngineRestarted", [:]) }
       self.midi.onSourcesChanged = { [weak self] sources in
         self?.sendEvent("onMidiSourcesChanged", ["sources": sources.map(Self.serialize)])
       }
@@ -86,6 +88,10 @@ public class AudioEngineModule: Module {
 
     Function("updateLayer") { (id: String, config: LayerConfigRecord) in
       self.mixer.updateLayer(id: id, config: config)
+    }
+
+    Function("isLayerHeld") { (id: String) -> Bool in
+      self.mixer.isLayerHeld(id: id)
     }
 
     AsyncFunction("removeLayer") { (id: String) in

@@ -1,0 +1,16 @@
+name: Native iOS E2E
+# Manual workflow: invoke with npx eas-cli@latest workflow:run .eas/workflows/e2e-ios.yml.
+jobs:
+  build:
+    type: build
+    params:
+      platform: ios
+      profile: e2e
+  e2e:
+    needs: [build]
+    type: maestro
+    env:
+      MAESTRO_APP_URL: ''
+    params:
+      build_id: ${{ needs.build.outputs.build_id }}
+      flow_path: ['.maestro/flows/navigation.yaml', '.maestro/flows/pad.yaml']

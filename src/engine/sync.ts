@@ -30,9 +30,13 @@ const CONFIG_KEYS: (keyof LayerConfig)[] = [
   'keyboard',
 ];
 
-/** Native config of a layer. `keyboard` is derived: chord pads ignore the keyboard. */
+/** Pads use a squared gain curve for finer control at low levels; keyboard layers keep linear gain. */
 const configOf = (layer: LayerDef) =>
-  ({ ...Object.fromEntries(CONFIG_KEYS.map((k) => [k, layer[k]])), keyboard: !layer.pad }) as LayerConfig;
+  ({
+    ...Object.fromEntries(CONFIG_KEYS.map((k) => [k, layer[k]])),
+    volume: layer.pad ? Math.min(Math.max(layer.volume, 0), 1) ** 2 : layer.volume,
+    keyboard: !layer.pad,
+  }) as LayerConfig;
 
 const instrumentKey = (layer: LayerDef) =>
   layer.plugin ? `plugin:${layer.plugin.componentId}` : `sf:${soundKey(layer.sound)}`;
@@ -47,6 +51,7 @@ const TAIL_MS = 6000;
 /** Layer id → time after which it may be unloaded. */
 const tailing = new Map<string, number>();
 let target: { active?: Patch; preload: Patch[] } = { preload: [] };
+let revision = 0;
 
 /**
  * Keeps the native engine in step with the concert:
@@ -54,12 +59,31 @@ let target: { active?: Patch; preload: Patch[] } = { preload: [] };
  * - `preload` patches (neighbours): loaded in the background so switching to them is instant;
  * - any other loaded layer rings out for TAIL_MS (held / sustained notes keep sounding), then is unloaded.
  * Only changed settings are pushed and instruments reload only when they change.
- * Calls are serialized so fast UI changes never interleave.
+ * Calls are serialized. Obsolete requests are skipped, including after a slow native load.
  */
 export function syncPatches(active: Patch | undefined, preload: Patch[] = []) {
   target = { active, preload };
-  queue = queue.then(() => apply(active, preload)).catch((e) => console.warn('[engine sync]', e));
-  return queue;
+  const request = ++revision;
+  queue = queue.then(() => apply(active, preload, request)).catch((e) => console.warn('[engine sync]', e));
+  // Callers (notably pad scheduling) wait for the latest queued state too.
+  return queue.then(() => queue);
+}
+
+/**
+ * Pushes mix / routing changes of already-loaded layers right away, outside the queue: a slow bank
+ * load (a preloaded neighbour, seconds for a big piano) must not delay Mute, Solo or a fader.
+ * The queued sync sees them as already applied.
+ */
+export function applyLiveSettings(patch: Patch | undefined) {
+  for (const layer of patch?.layers ?? []) {
+    const current = loaded.get(layer.id);
+    if (!current) continue;
+    const config = configOf(layer);
+    const changes = diff(current.config, config);
+    if (!changes) continue;
+    AudioEngine.updateLayer(layer.id, changes);
+    current.config = config;
+  }
 }
 
 /** Captures the live state of every plugin of a layer into the store (before unloading it). */
@@ -81,16 +105,20 @@ export async function capturePluginStates(layerId: string, layer?: LayerDef) {
   }
 }
 
-async function apply(active: Patch | undefined, preload: Patch[]) {
+async function apply(active: Patch | undefined, preload: Patch[], request: number) {
+  if (request !== revision) return;
   const keep = new Set([active, ...preload].flatMap((p) => p?.layers.map((l) => l.id) ?? []));
 
   // 1. The current patch first, so it plays as soon as possible.
-  for (const layer of active?.layers ?? []) await safeApplyLayer(layer);
+  for (const layer of active?.layers ?? []) {
+    await safeApplyLayer(layer);
+    if (request !== revision) return;
+  }
   AudioEngine.setActiveLayers(active?.layers.map((l) => l.id) ?? []);
 
   // 2. Layers we left: let them ring, then unload.
   const now = Date.now();
-  for (const [id, state] of [...loaded]) {
+  for (const [id, state] of loaded) {
     if (keep.has(id)) {
       tailing.delete(id);
       continue;
@@ -102,14 +130,29 @@ async function apply(active: Patch | undefined, preload: Patch[]) {
       continue;
     }
     if (expiry > now) continue;
+    if (AudioEngine.isLayerHeld(id)) {
+      // A key or the pedal still holds notes on it (e.g. the last chord of the previous song):
+      // unloading would cut them. Check again after another tail period.
+      tailing.set(id, now + TAIL_MS);
+      setTimeout(() => syncPatches(target.active, target.preload), TAIL_MS + 50);
+      continue;
+    }
     tailing.delete(id);
-    if (state.hasPlugins) await capturePluginStates(id);
+    if (state.hasPlugins) {
+      await capturePluginStates(id);
+      if (request !== revision) return;
+    }
     loaded.delete(id);
     await AudioEngine.removeLayer(id);
+    if (request !== revision) return;
   }
 
   // 3. Neighbours in the background.
-  for (const patch of preload) for (const layer of patch.layers) await safeApplyLayer(layer);
+  for (const patch of preload)
+    for (const layer of patch.layers) {
+      await safeApplyLayer(layer);
+      if (request !== revision) return;
+    }
 }
 
 async function safeApplyLayer(layer: LayerDef) {
@@ -152,8 +195,13 @@ async function applyLayer(layer: LayerDef) {
 
 async function applyEffects(layerId: string, have: Loaded['effects'], want: EffectDef[]) {
   const wantIds = new Set(want.map((e) => e.id));
-  const next = have.filter((e) => wantIds.has(e.id));
-  for (const e of have) if (!wantIds.has(e.id)) await AudioEngine.removeEffect(layerId, e.id);
+  // Commit each successful native operation immediately. A later AU can fail;
+  // retrying must preserve effects that are already installed and configured.
+  const next = have;
+  for (const e of have.filter((e) => !wantIds.has(e.id))) {
+    await AudioEngine.removeEffect(layerId, e.id);
+    next.splice(next.indexOf(e), 1);
+  }
 
   for (const effect of want) {
     const existing = next.find((e) => e.id === effect.id);

@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react", "jest"],
+  "categories": { "correctness": "error" },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "error",
+    "react/refs": "off",
+    "react/set-state-in-effect": "off",
+    "jest/no-focused-tests": "error",
+    "jest/no-disabled-tests": "error"
+  },
+  "ignorePatterns": ["ios/**", "android/**", "coverage/**", ".expo/**", "dist/**", "node_modules/**"],
+  "overrides": [{ "files": ["tests/**"], "env": { "jest": true } }]
+}

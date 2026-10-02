@@ -20,8 +20,14 @@ const sounding = new Set<string>();
 
 /** Called for every note event from the keyboard (hardware or on-screen). */
 export function onKeyboardNote(type: 'noteOn' | 'noteOff', note: number) {
-  if (type === 'noteOn') held.add(note);
-  else held.delete(note);
+  if (type === 'noteOff') {
+    // Only pressed keys propose a chord. Lifting fingers one by one passes through subsets of the
+    // chord (Cmaj7 → C → C5…) that were never played as such. A pending chord whose keys were
+    // released before it settled is still dropped by the check in the timeout below.
+    held.delete(note);
+    return;
+  }
+  held.add(note);
 
   // Releasing the keys keeps the current chord: the pad holds until a new chord is played.
   const chord = detectChord(held);
@@ -55,7 +61,7 @@ export function updatePads() {
     else sounding.delete(layer.id);
   }
 
-  for (const id of [...sounding]) {
+  for (const id of sounding) {
     if (active.has(id)) continue;
     AudioEngine.setLayerNotes(id, [], PAD_VELOCITY, DEFAULT_FADE);
     sounding.delete(id);
@@ -72,6 +78,11 @@ export function togglePads() {
 
 /** Panic: silences everything, pads included (they stay off until restarted). */
 export function panic() {
+  clearTimeout(pending);
+  pending = undefined;
+  held.clear();
+  sounding.clear();
+  usePadChord.setState({ detected: null });
   const state = useConcert.getState();
   for (const layer of selectCurrentPatch(state)?.layers ?? []) {
     if (layer.pad?.playing) state.updateLayer(layer.id, { pad: { ...layer.pad, playing: false } });

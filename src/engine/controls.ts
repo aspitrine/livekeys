@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 
-import AudioEngine from '../../modules/audio-engine';
 import type { MappingTarget } from '../model/types';
 import { selectCurrentPatch, useConcert } from '../store/concert';
 import { panic, togglePads } from './pads';
@@ -46,6 +45,12 @@ const lastValues = new Map<string, number>();
 
 /** Called for every Control Change coming from the hardware. */
 export function handleControlChange(channel: number, cc: number, value: number) {
+  // These MIDI commands are unconditional, including their normal value of zero.
+  // The native engine already stops its voices; keep pad state/timers in step too.
+  if (cc === 120 || cc === 123) {
+    panic();
+    return;
+  }
   const store = useConcert.getState();
   const learning = useMidiLearn.getState().learning;
   if (learning) {

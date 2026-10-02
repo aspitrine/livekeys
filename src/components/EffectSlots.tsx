@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { ActionSheetIOS, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { instrumentName } from '../model/defaults';
+import { instrumentIcon } from '../model/soundCategories';
 import type { EffectDef, LayerDef } from '../model/types';
 import { useConcert } from '../store/concert';
 import { colors } from '../theme';
@@ -41,7 +42,7 @@ export function InstrumentSlot({ layer }: { layer: LayerDef }) {
       accessibilityLabel={`Instrument : ${instrumentName(layer)}`}
       style={({ pressed }) => [styles.slot, styles.instrument, pressed && styles.pressed]}
     >
-      <Icon name={layer.plugin ? 'puzzlepiece.extension.fill' : 'pianokeys'} size={11} color={layer.color} />
+      <Icon name={instrumentIcon(layer)} size={11} color={layer.color} />
       <Text style={styles.name} numberOfLines={1}>
         {instrumentName(layer)}
       </Text>

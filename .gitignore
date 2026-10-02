@@ -36,6 +36,13 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# Tests and local E2E runtimes
+coverage/
+.maestro-results/
+.tools/
+.build/
+.swiftpm/
+
 # generated native folders
 /ios
 /android

@@ -1,5 +1,5 @@
 import type { IconName } from '../components/Icon';
-import type { SoundRef } from './types';
+import type { LayerDef, SoundRef } from './types';
 
 export type Subcategory = { id: string; name: string; programs?: number[] };
 export type Category = { id: string; name: string; icon: IconName; subcategories: Subcategory[] };
@@ -139,6 +139,13 @@ export function placeOf(sound: SoundRef): Place | null {
     }
   }
   return null;
+}
+
+/** Use the browser's actual sound category, including banks with non-GM program numbers. */
+export function instrumentIcon(layer: Pick<LayerDef, 'sound' | 'plugin'>): IconName {
+  if (layer.plugin) return 'puzzlepiece.extension.fill';
+  const place = placeOf(layer.sound);
+  return CATEGORIES.find((category) => category.id === place?.category)?.icon ?? 'music.note';
 }
 
 export const placeKey = (p: Place) => `${p.category}/${p.subcategory}`;

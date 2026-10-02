@@ -208,13 +208,24 @@ export function SplitKeyboard({ layers, onPickNote, height = 120, focusLayerId, 
   const fingers = useRef(new Map<string, number>()); // touch identifier → note it holds
   const [touched, setTouched] = useState<ReadonlySet<number>>(new Set());
 
+  useEffect(() => {
+    const activeFingers = fingers.current;
+    return () => {
+      // Navigation can remove the touch surface before UIKit sends touchEnd/cancel.
+      const notes = new Set(activeFingers.values());
+      activeFingers.clear();
+      for (const note of notes) AudioEngine.noteOff(note, 0);
+    };
+  }, []);
+
   const onLayout = (e: LayoutChangeEvent) => {
     size.current = { width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height };
   };
 
   const release = (note: number) => {
     // Another finger may still hold the same key.
-    if (!onPickNote && ![...fingers.current.values()].includes(note)) AudioEngine.noteOff(note, 0);
+    // Only playing touches enter the map; the mode may change before they end.
+    if (![...fingers.current.values()].includes(note)) AudioEngine.noteOff(note, 0);
   };
 
   const onTouch = (e: GestureResponderEvent, phase: 'start' | 'move' | 'end') => {
@@ -301,6 +312,7 @@ export function SplitKeyboard({ layers, onPickNote, height = 120, focusLayerId, 
       </View>
       <View
         style={{ height }}
+        testID="split-keyboard"
         onLayout={onLayout}
         onStartShouldSetResponder={() => true}
         onResponderTerminationRequest={() => false}

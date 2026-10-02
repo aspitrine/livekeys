@@ -1,0 +1,11 @@
+appId: net.eliakim.livekeys
+name: Capture audio diagnostics locally
+---
+- runFlow: ../helpers/launch.yaml
+- tapOn: 'Performance'
+- tapOn: 'Capturer 30 secondes'
+- assertVisible: 'Capture en cours [(]30 s[)]'
+- extendedWaitUntil:
+    visible: 'Diagnostic enregistré.'
+    timeout: 45000
+- assertVisible: 'Capturer 30 secondes'

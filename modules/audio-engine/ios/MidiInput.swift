@@ -21,6 +21,8 @@ struct MidiSource {
 final class MidiInput {
   var onMessage: ((MidiMessage) -> Void)?
   var onSourcesChanged: (([MidiSource]) -> Void)?
+  /// A source went away (cable pulled, Bluetooth dropped): its pending note-offs will never arrive.
+  var onSourceRemoved: (() -> Void)?
 
   private var client = MIDIClientRef()
   private var inputPort = MIDIPortRef()
@@ -65,15 +67,17 @@ final class MidiInput {
     }
   }
 
+  /// Connects new sources and forgets removed ones. Sources still present stay connected: dropping and
+  /// re-adding them (e.g. when a Bluetooth keyboard reconnects) could lose a note-off in between.
   private func connectAllSources() {
-    for endpoint in connected { MIDIPortDisconnectSource(inputPort, endpoint) }
-    connected.removeAll()
-    for i in 0..<MIDIGetNumberOfSources() {
-      let endpoint = MIDIGetSource(i)
-      if MIDIPortConnectSource(inputPort, endpoint, nil) == noErr {
-        connected.insert(endpoint)
-      }
+    let current = Set((0..<MIDIGetNumberOfSources()).map { MIDIGetSource($0) })
+    let removed = connected.subtracting(current)
+    for endpoint in removed { MIDIPortDisconnectSource(inputPort, endpoint) }
+    connected.subtract(removed)
+    for endpoint in current.subtracting(connected) where MIDIPortConnectSource(inputPort, endpoint, nil) == noErr {
+      connected.insert(endpoint)
     }
+    if !removed.isEmpty { onSourceRemoved?() }
     onSourcesChanged?(sources())
   }
 

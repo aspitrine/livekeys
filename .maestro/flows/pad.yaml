@@ -1,0 +1,24 @@
+appId: net.eliakim.livekeys
+name: Add a pad, play a fixed chord, stop and panic
+---
+- runFlow: ../helpers/launch.yaml
+- tapOn: 'Ajouter un pad'
+- assertVisible: 'Arrêter le pad'
+- tapOn: 'Suivre les accords joués'
+- tapOn: 'Mode scène'
+- assertVisible: 'Pad C'
+- tapOn: '.*Quitter'
+- tapOn: 'D'
+- tapOn: 'Arrêter le pad'
+- assertVisible: 'Lancer le pad'
+- tapOn: 'Lancer le pad'
+- assertVisible: 'Arrêter le pad'
+- tapOn: 'Mode scène'
+- assertVisible: 'Pad D'
+- tapOn: '.*Quitter'
+- tapOn: 'Panic : coupe toutes les notes'
+- assertVisible: 'Lancer le pad'
+- tapOn: 'Lancer le pad'
+- assertVisible: 'Arrêter le pad'
+- tapOn: 'Panic : coupe toutes les notes'
+- assertVisible: 'Lancer le pad'

@@ -12,7 +12,7 @@ import { selectCurrentPatch, selectNeighborPatches, useConcert } from '../store/
 import { handleControlChange } from './controls';
 import { onKeyboardNote, updatePads } from './pads';
 import { startPerformanceMonitor } from './performance';
-import { syncPatches } from './sync';
+import { applyLiveSettings, syncPatches } from './sync';
 
 type EngineStatus = {
   info: EngineInfo | null;
@@ -76,8 +76,13 @@ export async function bootEngine() {
       active !== last.active ||
       preload.length !== last.preload.length ||
       preload.some((p, i) => p !== last!.preload[i]);
-    // Pads get their notes once their layers are loaded.
-    if (patchesChanged) syncPatches(active, preload).then(updatePads);
+    if (patchesChanged) {
+      // Loaded layers react at once (Mute, faders, pad Stop / chord), even while banks load…
+      applyLiveSettings(active);
+      updatePads();
+      // …then again once the queued sync has loaded whatever was missing.
+      syncPatches(active, preload).then(updatePads);
+    }
     if (state.masterVolume !== last?.volume) AudioEngine.setMasterVolume(state.masterVolume);
     if (state.settings.limiter !== last?.limiter) AudioEngine.setLimiterEnabled(state.settings.limiter);
     const { bluetoothAutoReconnect, bluetoothDevices } = state.settings;
@@ -85,6 +90,9 @@ export async function bootEngine() {
     if (bluetooth !== last?.bluetooth) AudioEngine.setBluetoothMidiDevices(bluetooth ? bluetooth.split(',') : []);
     last = { active, preload, volume: state.masterVolume, limiter: state.settings.limiter, bluetooth };
   };
+
+  // An interruption silenced the pads natively: play the chords the UI still shows as playing.
+  AudioEngine.addListener('onEngineRestarted', updatePads);
 
   // Keyboards plugged or paired while the app was in the background.
   AppState.addEventListener('change', (state) => state === 'active' && AudioEngine.refreshMidi());

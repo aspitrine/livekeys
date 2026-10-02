@@ -10,7 +10,6 @@ import type {
   MidiSource,
   PerformanceInfo,
   PluginInfo,
-  PluginKind,
   PluginQuery,
   PluginParameter,
   PluginPreset,
@@ -40,6 +39,8 @@ declare class AudioEngineModule extends NativeModule<AudioEngineModuleEvents> {
   setLayerNotes(layerId: string, notes: number[], velocity: number, fade: number): void;
   updateLayer(id: string, config: Partial<LayerConfig>): void;
   removeLayer(id: string): Promise<void>;
+  /** True while a key or the sustain pedal still holds notes on the layer. */
+  isLayerHeld(id: string): boolean;
   /**
    * `path`: local file path or file:// URI to an .sf2/.dls file.
    * `bank`: SF2 bank number (0 = melodic, 1...127 = variations, 128 = drum kits).

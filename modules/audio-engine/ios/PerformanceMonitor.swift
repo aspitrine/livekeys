@@ -1,40 +1,25 @@
 import AVFoundation
 import Darwin
 
-/// Written on the audio thread by the render notify, read (and reset) from the JS thread.
-/// Plain values, no locks: readings are approximate by design and never block audio.
-struct RenderStats {
-  var start: UInt64 = 0
-  /// Sum of per-cycle loads (1.0 = the whole buffer duration was spent rendering).
-  var sum: Double = 0
-  var count: UInt32 = 0
-  var peak: Double = 0
-  /// Cycles that took longer than the buffer: audible glitches.
-  var overloads: UInt32 = 0
-  var secondsPerTick: Double = 0
-  var sampleRate: Double = 48_000
-}
-
 /// Times the render of one Audio Unit (and everything it pulls upstream) against the buffer duration.
 final class RenderMeter {
-  private let stats = UnsafeMutablePointer<RenderStats>.allocate(capacity: 1)
+  private let stats: OpaquePointer
   private var unit: AudioUnit?
 
   init() {
-    stats.initialize(to: RenderStats())
     var timebase = mach_timebase_info_data_t()
     mach_timebase_info(&timebase)
-    stats.pointee.secondsPerTick = Double(timebase.numer) / Double(timebase.denom) / 1e9
+    stats = LKRenderStatsCreate(Double(timebase.numer) / Double(timebase.denom) / 1e9, 48_000)
   }
 
   deinit {
     detach()
-    stats.deallocate()
+    LKRenderStatsDestroy(stats)
   }
 
   func attach(_ unit: AudioUnit, sampleRate: Double) {
     detach()
-    stats.pointee.sampleRate = sampleRate > 0 ? sampleRate : 48_000
+    LKRenderStatsSetSampleRate(stats, sampleRate)
     if AudioUnitAddRenderNotify(unit, renderNotify, UnsafeMutableRawPointer(stats)) == noErr {
       self.unit = unit
     }
@@ -48,30 +33,19 @@ final class RenderMeter {
 
   /// Average and peak load since the previous read (1.0 = 100 % of the buffer), and overloads.
   func read() -> (average: Double, peak: Double, overloads: Int) {
-    let s = stats.pointee
-    stats.pointee.sum = 0
-    stats.pointee.count = 0
-    stats.pointee.peak = 0
-    stats.pointee.overloads = 0
-    return (s.count > 0 ? s.sum / Double(s.count) : 0, s.peak, Int(s.overloads))
+    let s = LKRenderStatsRead(stats)
+    return (s.average, s.peak, Int(s.overloads))
   }
 }
 
-/// Runs on the audio thread: no allocation, no lock, no Swift runtime calls beyond plain arithmetic.
+/// Runs on the audio thread: no allocation or mutex; counters cross threads through lock-free atomics.
 private let renderNotify: AURenderCallback = { refCon, flags, _, bus, frames, _ in
   guard bus == 0 else { return noErr }
-  let s = refCon.assumingMemoryBound(to: RenderStats.self)
+  let s = OpaquePointer(refCon)
   if flags.pointee.contains(.unitRenderAction_PreRender) {
-    s.pointee.start = mach_absolute_time()
-  } else if flags.pointee.contains(.unitRenderAction_PostRender), s.pointee.start != 0 {
-    let elapsed = Double(mach_absolute_time() &- s.pointee.start) * s.pointee.secondsPerTick
-    let budget = Double(frames) / s.pointee.sampleRate
-    let load = budget > 0 ? elapsed / budget : 0
-    s.pointee.sum += load
-    s.pointee.count &+= 1
-    if load > s.pointee.peak { s.pointee.peak = load }
-    if load > 1 { s.pointee.overloads &+= 1 }
-    s.pointee.start = 0
+    LKRenderStatsPreRender(s, mach_absolute_time())
+  } else if flags.pointee.contains(.unitRenderAction_PostRender) {
+    LKRenderStatsPostRender(s, mach_absolute_time(), frames)
   }
   return noErr
 }

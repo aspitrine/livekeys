@@ -1,0 +1,29 @@
+appId: net.eliakim.livekeys
+---
+- setOrientation: PORTRAIT
+- launchApp:
+    clearState: true
+- runFlow:
+    when:
+      true: ${MAESTRO_APP_URL != ""}
+    commands:
+      - openLink: ${MAESTRO_APP_URL}
+- extendedWaitUntil:
+    visible: 'Ajouter un pad'
+    timeout: 60000
+- runFlow:
+    when:
+      true: ${MAESTRO_APP_URL != ""}
+    commands:
+      - tapOn:
+          text: 'Continue'
+          optional: true
+      # Disable Expo's floating tools button when enabled; it can cover Panic.
+      - tapOn:
+          text: '1'
+          rightOf: 'Tools button'
+          below: 'Fast refresh'
+          optional: true
+      - tapOn:
+          text: 'Close'
+          optional: true
