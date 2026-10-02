@@ -1,13 +1,20 @@
 {
   "expo": {
-    "name": "music-mixer-app",
+    "name": "LiveKeys",
     "slug": "music-mixer-app",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "net.eliakim.livekeys",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "NSBluetoothAlwaysUsageDescription": "LiveKeys utilise le Bluetooth pour se connecter \u00e0 ton clavier MIDI sans fil."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -20,6 +27,20 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "enableSceneSupport": true
+          }
+        }
+      ],
+      "expo-router",
+      "expo-sqlite",
+      "expo-sharing"
+    ],
+    "scheme": "livekeys"
   }
 }
