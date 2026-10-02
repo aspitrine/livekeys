@@ -1,5 +1,6 @@
 import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { LIBRARY } from '../model/library';
 import { colors } from '../theme';
 
 const CREDITS = [
@@ -15,6 +16,8 @@ const CREDITS = [
     license: 'CC0 1.0 — domaine public',
     url: 'https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html',
   },
+  // Downloadable banks (bibliothèque de sons), converted to SF2 and hosted on github.com/aspitrine/livekeys-sounds.
+  ...LIBRARY.map((b) => ({ name: b.name, author: b.author, license: b.license, url: b.source })),
 ];
 
 export default function CreditsScreen() {

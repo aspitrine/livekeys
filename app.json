@@ -14,6 +14,10 @@
           "audio"
         ],
         "NSBluetoothAlwaysUsageDescription": "LiveKeys utilise le Bluetooth pour se connecter \u00e0 ton clavier MIDI sans fil."
+      },
+      "appleTeamId": "C2YTFM84TW",
+      "entitlements": {
+        "inter-app-audio": true
       }
     },
     "android": {

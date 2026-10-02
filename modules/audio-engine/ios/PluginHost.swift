@@ -4,29 +4,42 @@ import AVFoundation
 /// Component ids are "type:subtype:manufacturer" four-char codes, e.g. "aumu:Moog:Moog".
 enum PluginHost {
   enum Kind: String {
-    case instrument, effect
+    /// `all`: every Audio Unit type, for diagnostics.
+    case instrument, effect, all
   }
 
   static func list(kind: Kind) -> [[String: Any]] {
-    let types: [OSType] =
-      kind == .instrument
-      ? [kAudioUnitType_MusicDevice]
-      : [kAudioUnitType_Effect, kAudioUnitType_MusicEffect]
+    let types: [OSType]
+    switch kind {
+    case .instrument: types = [kAudioUnitType_MusicDevice]
+    case .effect: types = [kAudioUnitType_Effect, kAudioUnitType_MusicEffect]
+    case .all:
+      types = [
+        kAudioUnitType_MusicDevice, kAudioUnitType_Effect, kAudioUnitType_MusicEffect,
+        kAudioUnitType_MIDIProcessor, kAudioUnitType_Generator, kAudioUnitType_RemoteInstrument,
+        kAudioUnitType_RemoteGenerator, kAudioUnitType_RemoteMusicEffect, kAudioUnitType_RemoteEffect,
+      ]
+    }
 
     return types.flatMap { type in
       AVAudioUnitComponentManager.shared().components(matching: description(type: type))
     }
+    .filter { !hidden.contains(componentId($0.audioComponentDescription)) }
     .sorted { ($0.manufacturerName, $0.name) < ($1.manufacturerName, $1.name) }
     .map { c in
       [
         "id": componentId(c.audioComponentDescription),
         "name": c.name,
         "manufacturer": c.manufacturerName,
-        "kind": kind.rawValue,
+        "kind": c.audioComponentDescription.componentType == kAudioUnitType_MusicDevice ? "instrument" : "effect",
         "isAUv3": c.audioComponentDescription.componentFlags & AudioComponentFlags.isV3AudioUnit.rawValue != 0,
       ]
     }
   }
+
+  /// Apple instruments that play nothing until a sound bank is configured (AUMIDISynth, AUSampler).
+  /// The built-in SoundFont sampler already covers them.
+  private static let hidden: Set<String> = ["aumu:msyn:appl", "aumu:samp:appl"]
 
   static func instantiate(componentId id: String) async throws -> AVAudioUnit {
     guard let desc = parse(componentId: id) else { throw PluginError.badComponentId(id) }
@@ -49,6 +62,24 @@ enum PluginHost {
           let state = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
     else { return }
     unit.auAudioUnit.fullStateForDocument = state
+  }
+
+  // MARK: Presets
+
+  /// Factory presets declared by the Audio Unit, plus the current one's number (-1 if none / user preset).
+  static func presets(of unit: AVAudioUnit) -> [String: Any] {
+    let au = unit.auAudioUnit
+    return [
+      "presets": (au.factoryPresets ?? []).map { ["number": $0.number, "name": $0.name] },
+      "current": au.currentPreset?.number ?? -1,
+    ]
+  }
+
+  static func selectPreset(of unit: AVAudioUnit, number: Int) {
+    let au = unit.auAudioUnit
+    if let preset = au.factoryPresets?.first(where: { $0.number == number }) {
+      au.currentPreset = preset
+    }
   }
 
   // MARK: Generic parameters (for AUs without a custom view)

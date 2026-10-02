@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { defaultConcert, makeLayer, makePatch } from '../model/defaults';
+import { defaultConcert, makeLayer, makePadLayer, makePatch } from '../model/defaults';
 import { SOUNDS } from '../model/sounds';
 import type { Concert, EffectDef, LayerDef, MidiMapping, Patch, PluginRef, SetList, SoundRef } from '../model/types';
 import { newId } from '../lib/id';
@@ -53,11 +53,17 @@ type ConcertState = {
   removePatch: (id: string) => void;
 
   addLayer: (patchId: string, sound?: SoundRef) => string;
+  /** Adds the patch's chord pad (at most one per patch; returns the existing one). */
+  addPadLayer: (patchId: string) => string;
   updateLayer: (layerId: string, patch: Partial<Omit<LayerDef, 'id'>>) => void;
   removeLayer: (layerId: string) => void;
 
   addEffect: (layerId: string, plugin: PluginRef) => void;
   removeEffect: (layerId: string, effectId: string) => void;
+  /** Moves an effect earlier (-1) or later (+1) in the layer's signal chain. */
+  moveEffect: (layerId: string, effectId: string, delta: number) => void;
+  /** Moves a layer left (-1) or right (+1) in its patch. */
+  moveLayer: (layerId: string, delta: number) => void;
   setEffectBypass: (layerId: string, effectId: string, bypass: boolean) => void;
   /** Stores a plugin state captured from the engine. `slot`: "instrument" or an effect id. */
   savePluginState: (layerId: string, slot: string, state: string) => void;
@@ -72,6 +78,16 @@ const mapPatches = (c: Concert, fn: (p: Patch) => Patch): Concert =>
 
 const mapLayers = (c: Concert, fn: (l: LayerDef) => LayerDef): Concert =>
   mapPatches(c, (p) => ({ ...p, layers: p.layers.map(fn) }));
+
+/** Moves the item with `id` by `delta` positions (clamped). */
+function move<T extends { id: string }>(items: T[], id: string, delta: number): T[] {
+  const from = items.findIndex((i) => i.id === id);
+  const to = Math.min(Math.max(from + delta, 0), items.length - 1);
+  if (from < 0 || from === to) return items;
+  const next = [...items];
+  next.splice(to, 0, next.splice(from, 1)[0]);
+  return next;
+}
 
 /** Keeps the selection valid after a deletion. */
 const ensureSelection = (c: Concert, current: string | null) =>
@@ -168,6 +184,25 @@ export const useConcert = create<ConcertState>()(
           return { concert: next, currentPatchId: ensureSelection(next, currentPatchId) };
         }),
 
+      addPadLayer: (patchId) => {
+        let layerId = '';
+        set(({ concert }) => ({
+          concert: mapPatches(concert, (p) => {
+            if (p.id !== patchId) return p;
+            // One pad per patch: return the existing one.
+            const existing = p.layers.find((l) => l.pad);
+            if (existing) {
+              layerId = existing.id;
+              return p;
+            }
+            const layer = makePadLayer(p.layers.length);
+            layerId = layer.id;
+            return { ...p, layers: [...p.layers, layer] };
+          }),
+        }));
+        return layerId;
+      },
+
       addLayer: (patchId, sound = SOUNDS.grand) => {
         let layerId = '';
         set(({ concert }) => ({
@@ -190,6 +225,20 @@ export const useConcert = create<ConcertState>()(
           concert: mapLayers(concert, (l) => (l.id === layerId ? { ...l, effects: [...l.effects, effect] } : l)),
         }));
       },
+
+      moveEffect: (layerId, effectId, delta) =>
+        set(({ concert }) => ({
+          concert: mapLayers(concert, (l) =>
+            l.id === layerId ? { ...l, effects: move(l.effects, effectId, delta) } : l,
+          ),
+        })),
+
+      moveLayer: (layerId, delta) =>
+        set(({ concert }) => ({
+          concert: mapPatches(concert, (p) =>
+            p.layers.some((l) => l.id === layerId) ? { ...p, layers: move(p.layers, layerId, delta) } : p,
+          ),
+        })),
 
       removeEffect: (layerId, effectId) =>
         set(({ concert }) => ({

@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import AudioEngine from '../../modules/audio-engine';
 import type { MappingTarget } from '../model/types';
 import { selectCurrentPatch, useConcert } from '../store/concert';
+import { panic, togglePads } from './pads';
 
 /** While set, the next controller moved on the hardware gets mapped to this target. */
 export const useMidiLearn = create<{ learning: MappingTarget | null }>(() => ({ learning: null }));
@@ -16,6 +17,7 @@ export const MAPPABLE_TARGETS: MappingTarget[] = [
   ...[0, 1, 2, 3, 4, 5].map((index): MappingTarget => ({ kind: 'layerVolume', index })),
   { kind: 'nextPatch' },
   { kind: 'prevPatch' },
+  { kind: 'padToggle' },
   { kind: 'panic' },
 ];
 
@@ -29,6 +31,8 @@ export function targetLabel(t: MappingTarget): string {
       return 'Patch suivant';
     case 'prevPatch':
       return 'Patch précédent';
+    case 'padToggle':
+      return 'Pad on / off';
     case 'panic':
       return 'Panic';
   }
@@ -74,7 +78,10 @@ export function handleControlChange(channel: number, cc: number, value: number) 
         if (pressed) store.stepPatch(-1);
         break;
       case 'panic':
-        if (pressed) AudioEngine.panic();
+        if (pressed) panic();
+        break;
+      case 'padToggle':
+        if (pressed) togglePads();
         break;
     }
   }

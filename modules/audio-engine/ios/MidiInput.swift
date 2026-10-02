@@ -27,6 +27,12 @@ final class MidiInput {
   private var connected = Set<MIDIEndpointRef>()
 
   func start() throws {
+    // CoreMIDI delivers setup notifications on the run loop of the thread that created the client.
+    // Created on a background queue (no run loop), devices plugged / paired later are never seen.
+    guard Thread.isMainThread else {
+      try DispatchQueue.main.sync { try start() }
+      return
+    }
     guard client == 0 else { return }
 
     var status = MIDIClientCreateWithBlock("LiveKeys" as CFString, &client) { [weak self] notification in
@@ -48,6 +54,14 @@ final class MidiInput {
     (0..<MIDIGetNumberOfSources()).map { i in
       let endpoint = MIDIGetSource(i)
       return MidiSource(id: uniqueID(endpoint), name: displayName(endpoint))
+    }
+  }
+
+  /// Reconnects every current source (safety net when a notification was missed).
+  func refresh() {
+    DispatchQueue.main.async { [weak self] in
+      guard let self, self.client != 0 else { return }
+      self.connectAllSources()
     }
   }
 

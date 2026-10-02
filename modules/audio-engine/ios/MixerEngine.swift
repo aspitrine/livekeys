@@ -56,6 +56,7 @@ final class MixerEngine {
       try engine.start()
     }
     installMeter()
+    attachMasterMeter()
     observeSystemEvents()
     return info()
   }
@@ -108,9 +109,14 @@ final class MixerEngine {
   func addLayer(id: String, config patch: LayerConfigRecord) {
     let layer = Layer(id: id)
     layer.config.apply(patch)
+    if !layer.config.keyboard { layer.padVoices = PadVoices() }
 
     graph.sync {
       engine.attach(layer.instrument)
+      if let pv = layer.padVoices {
+        engine.attach(pv.second)
+        engine.attach(pv.mixer)
+      }
       engine.attach(layer.strip)
       wire(layer)
       engine.connect(layer.strip, to: engine.mainMixerNode, format: nil)
@@ -156,14 +162,17 @@ final class MixerEngine {
     let layer = try self.layer(layerId)
     let url = path.hasPrefix("file://") ? URL(string: path)! : URL(fileURLWithPath: path)
     let isDrums = bank == 128
+    let preset = SamplerPreset(
+      url: url,
+      program: UInt8(min(max(program, 0), 127)),
+      bankMSB: UInt8(isDrums ? kAUSampler_DefaultPercussionBankMSB : kAUSampler_DefaultMelodicBankMSB),
+      bankLSB: UInt8(isDrums ? kAUSampler_DefaultBankLSB : min(max(bank, 0), 127))
+    )
     try graph.sync {
       if layer.sampler == nil { replaceInstrument(of: layer, with: AVAudioUnitSampler()) }
-      try layer.sampler!.loadSoundBankInstrument(
-        at: url,
-        program: UInt8(min(max(program, 0), 127)),
-        bankMSB: UInt8(isDrums ? kAUSampler_DefaultPercussionBankMSB : kAUSampler_DefaultMelodicBankMSB),
-        bankLSB: UInt8(isDrums ? kAUSampler_DefaultBankLSB : min(max(bank, 0), 127))
-      )
+      layer.samplerPreset = preset
+      try layer.reloadSamplerPreset()
+      retriggerPad(layer)
     }
   }
 
@@ -202,6 +211,18 @@ final class MixerEngine {
     }
   }
 
+  /// Reorders the insert effects of a layer (ids in signal order; unknown ids are ignored).
+  func setEffectOrder(layerId: String, ids: [String]) throws {
+    let layer = try self.layer(layerId)
+    graph.sync {
+      let ordered = ids.compactMap { id in layer.effects.first { $0.id == id } }
+      guard ordered.count == layer.effects.count, ordered.map(\.id) != layer.effects.map(\.id) else { return }
+      unwire(layer)
+      layer.effects = ordered
+      wire(layer)
+    }
+  }
+
   func setEffectBypass(layerId: String, effectId: String, bypass: Bool) throws {
     try unit(layerId: layerId, slot: effectId).auAudioUnit.shouldBypassEffect = bypass
   }
@@ -223,14 +244,40 @@ final class MixerEngine {
   private func wire(_ layer: Layer) {
     let rate = engine.outputNode.outputFormat(forBus: 0).sampleRate
     let format = AVAudioFormat(standardFormatWithSampleRate: rate > 0 ? rate : 48_000, channels: 2)
+    if let pv = layer.padVoices, let format {
+      engine.connect(layer.instrument, to: pv.mixer, fromBus: 0, toBus: 0, format: format)
+      engine.connect(pv.second, to: pv.mixer, fromBus: 0, toBus: 1, format: format)
+    }
     let nodes = layer.chain + [layer.strip]
     for (from, to) in zip(nodes, nodes.dropFirst()) {
       engine.connect(from, to: to, format: format)
+    }
+    // Reconnecting resets AVAudioUnitSampler to its default sound.
+    try? layer.reloadSamplerPreset()
+    retriggerPad(layer)
+    // The last unit pulls the whole chain when it renders: timing it gives the layer's cost.
+    if let last = layer.chain.last as? AVAudioUnit {
+      layer.meter.attach(last.audioUnit, sampleRate: format?.sampleRate ?? 48_000)
+    }
+  }
+
+  /// A chord pad's notes stop when its instrument is reloaded or replaced: start them again.
+  private func retriggerPad(_ layer: Layer) {
+    lock.withLock {
+      if let pv = layer.padVoices {
+        for i in 0...1 { for note in pv.notes[i] { Layer.send(to: layer.padVoice(i), 0x90, note, layer.padVelocity) } }
+      } else {
+        for note in layer.padNotes { layer.send(0x90, note, layer.padVelocity) }
+      }
     }
   }
 
   private func unwire(_ layer: Layer) {
     layer.chain.forEach(engine.disconnectNodeOutput)
+    if let pv = layer.padVoices {
+      engine.disconnectNodeOutput(layer.instrument)
+      engine.disconnectNodeOutput(pv.second)
+    }
   }
 
   private func replaceInstrument(of layer: Layer, with unit: AVAudioUnit) {
@@ -249,9 +296,15 @@ final class MixerEngine {
   }
 
   private func detach(_ layer: Layer) {
+    layer.meter.detach()
     unwire(layer)
     engine.disconnectNodeOutput(layer.strip)
     layer.chain.forEach(engine.detach)
+    if let pv = layer.padVoices {
+      pv.fade?.cancel()
+      engine.detach(layer.instrument)
+      engine.detach(pv.second)
+    }
     engine.detach(layer.strip)
   }
 
@@ -340,10 +393,96 @@ final class MixerEngine {
     emit("cc", channel, Int(cc), Int(value))
   }
 
+  /// Chord pads: makes the layer hold exactly `notes`. Common tones keep sounding, others are released / started.
+  /// Chord pads: makes the layer hold exactly `notes`. With the built-in sampler the change
+  /// crossfades over `fade` seconds between two voices; otherwise only changed notes are re-triggered.
+  func setLayerNotes(layerId: String, notes: [Int], velocity: Int, fade: Double) {
+    let wanted = Set(notes.compactMap { (0...127).contains($0) ? UInt8($0) : nil })
+    let vel = UInt8(min(max(velocity, 1), 127))
+    lock.withLock {
+      guard let layer = layers[layerId] else { return }
+      layer.padVelocity = vel
+      guard let pv = layer.padVoices, layer.sampler != nil else {
+        for note in layer.padNotes.subtracting(wanted) { layer.send(0x80, note, 0) }
+        for note in wanted.subtracting(layer.padNotes) { layer.send(0x90, note, vel) }
+        layer.padNotes = wanted
+        return
+      }
+      crossfade(layer, pv, to: wanted, velocity: vel, seconds: max(fade, 0.05))
+      layer.padNotes = wanted
+    }
+  }
+
+  private let fadeQueue = DispatchQueue(label: "livekeys.pad-fade", qos: .userInteractive)
+
+  /// Call under `lock`.
+  private func crossfade(_ layer: Layer, _ pv: PadVoices, to wanted: Set<UInt8>, velocity: UInt8, seconds: Double) {
+    let from = pv.active
+    guard wanted != pv.notes[from] else { return }
+    pv.generation += 1
+    let generation = pv.generation
+    pv.fade?.cancel()
+
+    let outVoice = layer.padVoice(from) as! AVAudioMixing
+    let to = wanted.isEmpty ? from : 1 - from
+    let inVoice = layer.padVoice(to) as! AVAudioMixing
+
+    if !wanted.isEmpty {
+      // The incoming voice may still hold a chord fading out from an earlier change: replace it.
+      for note in pv.notes[to] { Layer.send(to: layer.padVoice(to), 0x80, note, 0) }
+      if pv.notes[from].isEmpty {
+        inVoice.volume = 1  // nothing playing: the sound's own attack does the fade-in
+      } else {
+        inVoice.volume = 0
+      }
+      for note in wanted { Layer.send(to: layer.padVoice(to), 0x90, note, velocity) }
+      pv.notes[to] = wanted
+      pv.active = to
+    }
+
+    let fadingOut = !pv.notes[from].isEmpty && (wanted.isEmpty || to != from)
+    let outStart = outVoice.volume
+    let inStart = wanted.isEmpty ? 0 : inVoice.volume
+    let steps = max(Int(seconds / 0.02), 1)
+    var step = 0
+
+    let timer = DispatchSource.makeTimerSource(queue: fadeQueue)
+    timer.schedule(deadline: .now(), repeating: .milliseconds(20))
+    timer.setEventHandler { [weak self, weak layer] in
+      guard let self, let layer else { return }
+      step += 1
+      // Equal-power curves: the sum stays steady, no dip in the middle of the change.
+      let t = min(Double(step) / Double(steps), 1)
+      if fadingOut { outVoice.volume = outStart * Float(cos(t * .pi / 2)) }
+      if !wanted.isEmpty && to != from { inVoice.volume = inStart + (1 - inStart) * Float(sin(t * .pi / 2)) }
+      guard t >= 1 else { return }
+      timer.cancel()
+      self.lock.withLock {
+        guard pv.generation == generation, fadingOut else { return }
+        // Release the faded-out chord; the voice stays silent until it plays the next chord.
+        for note in pv.notes[from] { Layer.send(to: layer.padVoice(from), 0x80, note, 0) }
+        pv.notes[from] = []
+      }
+    }
+    pv.fade = timer
+    timer.resume()
+  }
+
   func panic() {
     lock.withLock {
       activeNotes.removeAll()
       for layer in layers.values {
+        layer.padNotes.removeAll()
+        if let pv = layer.padVoices {
+          pv.fade?.cancel()
+          pv.generation += 1
+          for i in 0...1 {
+            let voice = layer.padVoice(i)
+            Layer.send(to: voice, 0xB0, 123, 0)
+            (voice as? AVAudioMixing)?.volume = 1
+          }
+          pv.notes = [[], []]
+        }
         layer.send(0xB0, 64, 0)
         layer.send(0xB0, 123, 0)
         layer.send(0xB0, 120, 0)
@@ -365,6 +504,38 @@ final class MixerEngine {
   }
 
   // MARK: - Metering & system events
+
+  // MARK: - Performance
+
+  private let masterMeter = RenderMeter()
+
+  /// Times the whole graph: the output unit pulls everything once per buffer.
+  private func attachMasterMeter() {
+    if let output = engine.outputNode.audioUnit {
+      masterMeter.attach(output, sampleRate: AVAudioSession.sharedInstance().sampleRate)
+    }
+  }
+
+  /// DSP load (whole graph and per layer, % of the buffer time), app CPU and memory.
+  func performance() -> [String: Any] {
+    let master = masterMeter.read()
+    let perLayer: [[String: Any]] = lock.withLock {
+      order.compactMap { id in
+        guard let layer = layers[id] else { return nil }
+        let r = layer.meter.read()
+        return ["id": id, "load": r.average * 100, "peak": r.peak * 100]
+      }
+    }
+    return [
+      "load": master.average * 100,
+      "peak": master.peak * 100,
+      "overloads": master.overloads,
+      "layers": perLayer,
+      "cpu": SystemStats.cpuPercent(),
+      "memoryMB": SystemStats.memoryMB(),
+      "availableMemoryMB": SystemStats.availableMemoryMB(),
+    ]
+  }
 
   private func installMeter() {
     let mixer = engine.mainMixerNode
@@ -411,6 +582,11 @@ final class MixerEngine {
     engine.prepare()
     try? engine.start()
     installMeter()
+    attachMasterMeter()
+    // A restarted engine resets every sampler to its default sound.
+    graph.async { [self] in
+      for layer in lock.withLock({ Array(layers.values) }) { try? layer.reloadSamplerPreset() }
+    }
   }
 }
 

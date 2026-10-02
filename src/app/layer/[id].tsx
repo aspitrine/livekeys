@@ -6,6 +6,8 @@ import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 're
 import AudioEngine from '../../../modules/audio-engine';
 import { Button } from '../../components/Button';
 import { SplitKeyboard } from '../../components/SplitKeyboard';
+import { EffectSlots } from '../../components/EffectSlots';
+import { PadEditor } from '../../components/PadEditor';
 import { Stepper } from '../../components/Stepper';
 import { BANK_LABELS } from '../../engine/catalog';
 import { instrumentName } from '../../model/defaults';
@@ -24,9 +26,10 @@ export default function LayerEditor() {
   const patch = useConcert(selectPatchOfLayer(id));
   const updateLayer = useConcert((s) => s.updateLayer);
   const removeLayer = useConcert((s) => s.removeLayer);
-  const removeEffect = useConcert((s) => s.removeEffect);
-  const setEffectBypass = useConcert((s) => s.setEffectBypass);
+  const moveLayer = useConcert((s) => s.moveLayer);
   const [learn, setLearn] = useState<LearnTarget>(null);
+  // Frozen while a range handle is dragged so the drag is not taken as a scroll.
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   const update = (p: Partial<LayerDef>) => updateLayer(id, p);
 
@@ -41,6 +44,7 @@ export default function LayerEditor() {
   });
 
   if (!layer) return null;
+  const position = patch?.layers.findIndex((l) => l.id === id) ?? 0;
 
   function pick(note: number) {
     if (!learn || !layer) return;
@@ -65,8 +69,34 @@ export default function LayerEditor() {
   return (
     <>
       <Stack.Screen options={{ title: layer.name }} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Button label="Terminé" variant="primary" onPress={() => router.back()} style={styles.done} />
+      <ScrollView
+        scrollEnabled={scrollEnabled}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.topActions}>
+          <Button icon="trash" label="Supprimer le layer" variant="danger" onPress={confirmDelete} />
+          <View style={styles.moveGroup}>
+            <Button
+              icon="arrow.left"
+              variant="subtle"
+              accessibilityLabel="Déplacer à gauche"
+              disabled={position <= 0}
+              onPress={() => moveLayer(id, -1)}
+            />
+            <Text style={styles.position}>
+              Position {position + 1} / {patch?.layers.length ?? 1}
+            </Text>
+            <Button
+              icon="arrow.right"
+              variant="subtle"
+              accessibilityLabel="Déplacer à droite"
+              disabled={!patch || position >= patch.layers.length - 1}
+              onPress={() => moveLayer(id, 1)}
+            />
+          </View>
+          <Button icon="checkmark" label="Terminé" variant="primary" onPress={() => router.back()} />
+        </View>
         <Section title="Nom">
           <TextInput
             value={layer.name}
@@ -76,7 +106,18 @@ export default function LayerEditor() {
           />
         </Section>
 
-        <Section title="Instrument">
+        {layer.pad && <PadEditor layer={layer} onChange={(pad) => update({ pad })} />}
+
+        {layer.pad && (
+          <Section title="Effets du pad">
+            <EffectSlots layer={layer} rows={layer.effects.length + 1} />
+            <Text style={styles.hint}>
+              Tap pour régler, appui long pour réordonner ou retirer. « + » ajoute un effet.
+            </Text>
+          </Section>
+        )}
+
+        <Section title={layer.pad ? 'Son du pad' : 'Instrument'}>
           <View style={styles.row}>
             <View style={styles.flex}>
               <Text style={styles.value}>{instrumentName(layer)}</Text>
@@ -88,6 +129,7 @@ export default function LayerEditor() {
             </View>
             {layer.plugin && (
               <Button
+                icon="slider.horizontal.below.rectangle"
                 label="Interface"
                 onPress={() =>
                   router.push({ pathname: '/plugin/[layerId]', params: { layerId: id, slot: 'instrument' } })
@@ -95,6 +137,7 @@ export default function LayerEditor() {
               />
             )}
             <Button
+              icon="music.note.list"
               label="Changer"
               variant="primary"
               onPress={() => router.push({ pathname: '/sound/[layerId]', params: { layerId: id } })}
@@ -102,109 +145,96 @@ export default function LayerEditor() {
           </View>
         </Section>
 
-        <Section title="Effets">
-          {layer.effects.length === 0 && <Text style={styles.hint}>Aucun effet. Ajoute une reverb, un delay…</Text>}
-          {layer.effects.map((effect, index) => (
-            <View key={effect.id} style={styles.row}>
-              <Text style={styles.effectIndex}>{index + 1}</Text>
-              <View style={styles.flex}>
-                <Text style={[styles.value, effect.bypass && styles.bypassed]}>{effect.plugin.name}</Text>
-                <Text style={styles.hint}>{effect.plugin.manufacturer}</Text>
+        {!layer.pad && (
+          <>
+            <Section title="Zone de clavier (split)">
+              <RangeRow
+                label="Note basse"
+                value={layer.keyLow}
+                learning={learn === 'keyLow'}
+                onLearn={() => setLearn(learn === 'keyLow' ? null : 'keyLow')}
+                onChange={(keyLow) => update({ keyLow, keyHigh: Math.max(keyLow, layer.keyHigh) })}
+              />
+              <RangeRow
+                label="Note haute"
+                value={layer.keyHigh}
+                learning={learn === 'keyHigh'}
+                onLearn={() => setLearn(learn === 'keyHigh' ? null : 'keyHigh')}
+                onChange={(keyHigh) => update({ keyHigh, keyLow: Math.min(keyHigh, layer.keyLow) })}
+              />
+              <Text style={styles.hint}>
+                {learn
+                  ? 'Joue une note sur ton piano ou touche le clavier ci-dessous…'
+                  : 'Fais glisser les poignées de la barre colorée, ou « Apprendre » puis joue la note sur ton piano.'}
+              </Text>
+              <SplitKeyboard
+                layers={patch?.layers ?? [layer]}
+                focusLayerId={id}
+                onRangeChange={(keyLow, keyHigh) => update({ keyLow, keyHigh })}
+                onRangeDrag={(dragging) => setScrollEnabled(!dragging)}
+                onPickNote={learn ? pick : undefined}
+                height={90}
+              />
+              <Button
+                icon="arrow.left.and.right"
+                label="Tout le clavier"
+                onPress={() => update({ keyLow: 0, keyHigh: 127 })}
+                style={styles.alignStart}
+              />
+            </Section>
+
+            <Section title="Transposition">
+              <Stepper
+                value={layer.transpose}
+                onChange={(transpose) => update({ transpose })}
+                min={-48}
+                max={48}
+                bigStep={12}
+                format={(v) => `${v > 0 ? '+' : ''}${v} st`}
+              />
+            </Section>
+
+            <Section title="Vélocité">
+              <View style={styles.row}>
+                <Text style={styles.label}>Min</Text>
+                <Stepper
+                  value={layer.velocityLow}
+                  onChange={(velocityLow) =>
+                    update({ velocityLow, velocityHigh: Math.max(velocityLow, layer.velocityHigh) })
+                  }
+                  min={1}
+                  max={127}
+                  bigStep={10}
+                />
               </View>
-              <Text style={styles.hint}>Actif</Text>
-              <Switch value={!effect.bypass} onValueChange={(on) => setEffectBypass(id, effect.id, !on)} />
-              <Button
-                label="Régler"
-                onPress={() => router.push({ pathname: '/plugin/[layerId]', params: { layerId: id, slot: effect.id } })}
-              />
-              <Button label="✕" variant="danger" onPress={() => removeEffect(id, effect.id)} />
-            </View>
-          ))}
-          <Button
-            label="＋ Ajouter un effet"
-            onPress={() => router.push({ pathname: '/effect/[layerId]', params: { layerId: id } })}
-            style={styles.alignStart}
-          />
-        </Section>
+              <View style={styles.row}>
+                <Text style={styles.label}>Max</Text>
+                <Stepper
+                  value={layer.velocityHigh}
+                  onChange={(velocityHigh) =>
+                    update({ velocityHigh, velocityLow: Math.min(velocityHigh, layer.velocityLow) })
+                  }
+                  min={1}
+                  max={127}
+                  bigStep={10}
+                />
+              </View>
+            </Section>
 
-        <Section title="Zone de clavier (split)">
-          <RangeRow
-            label="Note basse"
-            value={layer.keyLow}
-            learning={learn === 'keyLow'}
-            onLearn={() => setLearn(learn === 'keyLow' ? null : 'keyLow')}
-            onChange={(keyLow) => update({ keyLow, keyHigh: Math.max(keyLow, layer.keyHigh) })}
-          />
-          <RangeRow
-            label="Note haute"
-            value={layer.keyHigh}
-            learning={learn === 'keyHigh'}
-            onLearn={() => setLearn(learn === 'keyHigh' ? null : 'keyHigh')}
-            onChange={(keyHigh) => update({ keyHigh, keyLow: Math.min(keyHigh, layer.keyLow) })}
-          />
-          <Text style={styles.hint}>
-            {learn
-              ? 'Joue une note sur ton piano ou touche le clavier ci-dessous…'
-              : '« Apprendre » puis joue la note sur ton piano.'}
-          </Text>
-          <SplitKeyboard layers={patch?.layers ?? [layer]} onPickNote={learn ? pick : undefined} height={90} />
-          <Button
-            label="Tout le clavier"
-            onPress={() => update({ keyLow: 0, keyHigh: 127 })}
-            style={styles.alignStart}
-          />
-        </Section>
-
-        <Section title="Transposition">
-          <Stepper
-            value={layer.transpose}
-            onChange={(transpose) => update({ transpose })}
-            min={-48}
-            max={48}
-            bigStep={12}
-            format={(v) => `${v > 0 ? '+' : ''}${v} st`}
-          />
-        </Section>
-
-        <Section title="Vélocité">
-          <View style={styles.row}>
-            <Text style={styles.label}>Min</Text>
-            <Stepper
-              value={layer.velocityLow}
-              onChange={(velocityLow) =>
-                update({ velocityLow, velocityHigh: Math.max(velocityLow, layer.velocityHigh) })
-              }
-              min={1}
-              max={127}
-              bigStep={10}
-            />
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Max</Text>
-            <Stepper
-              value={layer.velocityHigh}
-              onChange={(velocityHigh) =>
-                update({ velocityHigh, velocityLow: Math.min(velocityHigh, layer.velocityLow) })
-              }
-              min={1}
-              max={127}
-              bigStep={10}
-            />
-          </View>
-        </Section>
-
-        <Section title="Canal MIDI">
-          <View style={styles.chips}>
-            {CHANNELS.map((ch) => (
-              <Button
-                key={ch}
-                label={ch < 0 ? 'Omni' : String(ch + 1)}
-                active={layer.midiChannel === ch}
-                onPress={() => update({ midiChannel: ch })}
-              />
-            ))}
-          </View>
-        </Section>
+            <Section title="Canal MIDI">
+              <View style={styles.chips}>
+                {CHANNELS.map((ch) => (
+                  <Button
+                    key={ch}
+                    label={ch < 0 ? 'Omni' : String(ch + 1)}
+                    active={layer.midiChannel === ch}
+                    onPress={() => update({ midiChannel: ch })}
+                  />
+                ))}
+              </View>
+            </Section>
+          </>
+        )}
 
         <Section title="Mix">
           <View style={styles.row}>
@@ -225,13 +255,15 @@ export default function LayerEditor() {
                   : `R${Math.round(layer.pan * 100)}`}
             </Text>
           </View>
-          <View style={styles.row}>
-            <Text style={[styles.label, styles.flex]}>Pédale de sustain</Text>
-            <Switch value={layer.sustainEnabled} onValueChange={(sustainEnabled) => update({ sustainEnabled })} />
-          </View>
+          {!layer.pad && (
+            <View style={styles.row}>
+              <Text style={[styles.label, styles.flex]}>Pédale de sustain</Text>
+              <Switch value={layer.sustainEnabled} onValueChange={(sustainEnabled) => update({ sustainEnabled })} />
+            </View>
+          )}
         </Section>
 
-        <Button label="Supprimer ce layer" variant="danger" onPress={confirmDelete} />
+        <Button icon="trash" label="Supprimer ce layer" variant="danger" onPress={confirmDelete} />
       </ScrollView>
     </>
   );
@@ -258,6 +290,7 @@ function RangeRow(props: {
       <Text style={styles.label}>{props.label}</Text>
       <Stepper value={props.value} onChange={props.onChange} min={0} max={127} bigStep={12} format={noteName} />
       <Button
+        icon="dot.radiowaves.left.and.right"
         label={props.learning ? 'En attente…' : 'Apprendre'}
         active={props.learning}
         activeColor={colors.warning}
@@ -286,7 +319,7 @@ const styles = StyleSheet.create({
   input: { color: colors.text, fontSize: 17, backgroundColor: colors.control, borderRadius: 8, padding: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   alignStart: { alignSelf: 'flex-start' },
-  effectIndex: { color: colors.textMuted, width: 18, textAlign: 'right' },
-  bypassed: { color: colors.textMuted, textDecorationLine: 'line-through' },
-  done: { alignSelf: 'flex-end', paddingHorizontal: 20 },
+  moveGroup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  position: { color: colors.textDim, fontVariant: ['tabular-nums'] },
+  topActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
 });

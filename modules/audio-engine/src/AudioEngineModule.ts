@@ -8,9 +8,12 @@ import type {
   EngineOptions,
   LayerConfig,
   MidiSource,
+  PerformanceInfo,
   PluginInfo,
   PluginKind,
+  PluginQuery,
   PluginParameter,
+  PluginPreset,
   PluginSlot,
   SoundFontPreset,
 } from './AudioEngine.types';
@@ -21,6 +24,8 @@ declare class AudioEngineModule extends NativeModule<AudioEngineModuleEvents> {
   getInfo(): EngineInfo;
   setMasterVolume(volume: number): void;
   panic(): void;
+  /** Load figures since the previous call. */
+  getPerformance(): PerformanceInfo;
   setLimiterEnabled(enabled: boolean): void;
   showBluetoothMidi(): Promise<void>;
   /** BLE MIDI keyboards currently connected to the device. */
@@ -31,6 +36,8 @@ declare class AudioEngineModule extends NativeModule<AudioEngineModuleEvents> {
   setActiveLayers(ids: string[]): void;
 
   addLayer(id: string, config: Partial<LayerConfig>): Promise<void>;
+  /** Chord pads: the layer holds exactly `notes` (MIDI numbers); [] releases them. Changes crossfade over `fade` s. */
+  setLayerNotes(layerId: string, notes: number[], velocity: number, fade: number): void;
   updateLayer(id: string, config: Partial<LayerConfig>): void;
   removeLayer(id: string): Promise<void>;
   /**
@@ -44,7 +51,7 @@ declare class AudioEngineModule extends NativeModule<AudioEngineModuleEvents> {
   /** Sound banks shipped inside the app. */
   getBundledSoundFonts(): BundledSoundFont[];
 
-  listPlugins(kind: PluginKind): Promise<PluginInfo[]>;
+  listPlugins(kind: PluginQuery): Promise<PluginInfo[]>;
   /** Replaces the layer instrument by an Audio Unit, restoring `state` (base64) if given. */
   loadPlugin(layerId: string, componentId: string, state: string | null): Promise<void>;
   addEffect(
@@ -55,13 +62,20 @@ declare class AudioEngineModule extends NativeModule<AudioEngineModuleEvents> {
     bypass: boolean,
   ): Promise<void>;
   removeEffect(layerId: string, effectId: string): Promise<void>;
+  /** Reorders a layer's insert effects (ids in signal order). */
+  setEffectOrder(layerId: string, ids: string[]): void;
   setEffectBypass(layerId: string, effectId: string, bypass: boolean): void;
   getPluginState(layerId: string, slot: PluginSlot): Promise<string | null>;
   getPluginParameters(layerId: string, slot: PluginSlot): PluginParameter[];
+  /** Factory presets of the AU and the current preset number (-1 if none). */
+  getPluginPresets(layerId: string, slot: PluginSlot): { presets: PluginPreset[]; current: number };
+  selectPluginPreset(layerId: string, slot: PluginSlot, number: number): void;
   setPluginParameter(layerId: string, slot: PluginSlot, address: number, value: number): void;
 
   getMidiSources(): MidiSource[];
   setMidiMonitorEnabled(enabled: boolean): void;
+  /** Re-scans and reconnects MIDI sources. */
+  refreshMidi(): void;
   noteOn(note: number, velocity: number, channel: number): void;
   noteOff(note: number, channel: number): void;
 }

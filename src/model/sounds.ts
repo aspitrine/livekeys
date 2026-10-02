@@ -15,5 +15,6 @@ export const SOUNDS = {
   drawbar: gu(16, 'Drawbar Organ'),
   strings: gu(48, 'String Ensemble'),
   warmPad: gu(89, 'Warm Pad'),
+  choirPad: gu(91, 'Choir Pad'),
   fingerBass: gu(33, 'Finger Bass'),
 } satisfies Record<string, SoundRef>;

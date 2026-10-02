@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "banks": [
+    {
+      "id": "UprightPianoKW",
+      "name": "Upright Piano KW",
+      "category": "Piano droit",
+      "description": "Piano droit Kawai, version complète (plus de couches de vélocité que la version intégrée).",
+      "author": "FreePats (Gonzalo & Roberto)",
+      "license": "CC0 1.0",
+      "source": "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html",
+      "file": "UprightPianoKW.sf2",
+      "url": "https://github.com/aspitrine/livekeys-sounds/releases/download/v1/UprightPianoKW.sf2",
+      "size": 57377848,
+      "sha256": "d9f5157720963671906727ca2e12b3293fd822c831bb0de477dd1c5f3ad37108"
+    },
+    {
+      "id": "SplendidGrand",
+      "name": "Splendid Grand Piano",
+      "category": "Piano à queue",
+      "description": "Steinway, 4 couches de vélocité.",
+      "author": "AKAI (domaine public), SFZ par kinwie",
+      "license": "Domaine public",
+      "source": "https://github.com/sfzinstruments/SplendidGrandPiano",
+      "file": "SplendidGrand.sf2",
+      "url": "https://github.com/aspitrine/livekeys-sounds/releases/download/v1/SplendidGrand.sf2",
+      "size": 257888484,
+      "sha256": "114a58879c2abbc118d517eb3a62aca3b8cd66bcb76687f05db6d04a891c85ba"
+    },
+    {
+      "id": "jRhodes3c",
+      "name": "jRhodes Mark I (léger)",
+      "category": "Piano électrique",
+      "description": "Rhodes Mark I Stage 73 (1977), échantillons bouclés, léger.",
+      "author": "Jeff Learman",
+      "license": "CC BY-NC-SA 4.0",
+      "source": "https://github.com/sfzinstruments/jlearman.jRhodes3c",
+      "file": "jRhodes3c.sf2",
+      "url": "https://github.com/aspitrine/livekeys-sounds/releases/download/v1/jRhodes3c.sf2",
+      "size": 32797348,
+      "sha256": "8dd63e464d79c9bcf07ca131dec6e6ed2b0efbaaea110b3d342d2662a6c56d22"
+    },
+    {
+      "id": "jRhodes3d",
+      "name": "jRhodes Mark I (complet)",
+      "category": "Piano électrique",
+      "description": "Rhodes Mark I Stage 73 (1977), échantillons complets, stéréo.",
+      "author": "Jeff Learman",
+      "license": "CC BY-NC 4.0",
+      "source": "https://github.com/sfzinstruments/jlearman.jRhodes3d",
+      "file": "jRhodes3d.sf2",
+      "url": "https://github.com/aspitrine/livekeys-sounds/releases/download/v1/jRhodes3d.sf2",
+      "size": 157310374,
+      "sha256": "9c666dbd232a95dc125747896150d36f5d008d0bbb0064a57ec4a6afe646e565"
+    }
+  ]
+}

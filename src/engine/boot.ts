@@ -1,3 +1,4 @@
+import { AppState } from 'react-native';
 import { create } from 'zustand';
 
 import AudioEngine, {
@@ -9,6 +10,8 @@ import AudioEngine, {
 import type { Patch } from '../model/types';
 import { selectCurrentPatch, selectNeighborPatches, useConcert } from '../store/concert';
 import { handleControlChange } from './controls';
+import { onKeyboardNote, updatePads } from './pads';
+import { startPerformanceMonitor } from './performance';
 import { syncPatches } from './sync';
 
 type EngineStatus = {
@@ -44,12 +47,14 @@ export async function bootEngine() {
     useEngineStatus.setState({ lastEvent: event });
     if (event.type === 'programChange') selectPatchByProgram(event.data1);
     if (event.type === 'cc') handleControlChange(event.channel, event.data1, event.data2);
+    if (event.type === 'noteOn' || event.type === 'noteOff') onKeyboardNote(event.type, event.data1);
   });
 
   try {
     const info = await AudioEngine.start({ sampleRate: 48000, bufferFrames: 128 });
     useEngineStatus.setState({ info, sources: AudioEngine.getMidiSources() });
     AudioEngine.setMidiMonitorEnabled(true);
+    startPerformanceMonitor();
   } catch (e) {
     useEngineStatus.setState({ error: String(e) });
     return;
@@ -71,7 +76,8 @@ export async function bootEngine() {
       active !== last.active ||
       preload.length !== last.preload.length ||
       preload.some((p, i) => p !== last!.preload[i]);
-    if (patchesChanged) syncPatches(active, preload);
+    // Pads get their notes once their layers are loaded.
+    if (patchesChanged) syncPatches(active, preload).then(updatePads);
     if (state.masterVolume !== last?.volume) AudioEngine.setMasterVolume(state.masterVolume);
     if (state.settings.limiter !== last?.limiter) AudioEngine.setLimiterEnabled(state.settings.limiter);
     const { bluetoothAutoReconnect, bluetoothDevices } = state.settings;
@@ -79,6 +85,9 @@ export async function bootEngine() {
     if (bluetooth !== last?.bluetooth) AudioEngine.setBluetoothMidiDevices(bluetooth ? bluetooth.split(',') : []);
     last = { active, preload, volume: state.masterVolume, limiter: state.settings.limiter, bluetooth };
   };
+
+  // Keyboards plugged or paired while the app was in the background.
+  AppState.addEventListener('change', (state) => state === 'active' && AudioEngine.refreshMidi());
 
   apply(useConcert.getState());
   useConcert.subscribe(apply);

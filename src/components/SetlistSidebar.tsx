@@ -5,6 +5,8 @@ import type { Patch, SetList } from '../model/types';
 import { useConcert } from '../store/concert';
 import { colors } from '../theme';
 import { Button } from './Button';
+import { Icon } from './Icon';
+import { PadPanel } from './PadPanel';
 
 function prompt(title: string, defaultValue: string, onOk: (value: string) => void) {
   Alert.prompt(title, undefined, (value) => value?.trim() && onOk(value.trim()), 'plain-text', defaultValue);
@@ -63,7 +65,7 @@ export function SetlistSidebar() {
                   prompt('Nouveau patch', `Patch ${set.patches.length + 1}`, (name) => actions.addPatch(set.id, name))
                 }
               >
-                <Text style={styles.add}>＋</Text>
+                <Icon name="plus.circle.fill" size={20} color={colors.accent} />
               </Pressable>
             </Pressable>
             {set.patches.map((patch, index) => {
@@ -75,7 +77,7 @@ export function SetlistSidebar() {
                   onLongPress={() => patchMenu(patch)}
                   style={[styles.patch, selected && styles.patchSelected]}
                 >
-                  <Text style={styles.patchIndex}>{index + 1}</Text>
+                  <Text style={[styles.patchIndex, selected && styles.patchIndexSelected]}>{index + 1}</Text>
                   <Text style={[styles.patchName, selected && styles.patchNameSelected]} numberOfLines={1}>
                     {patch.name}
                   </Text>
@@ -87,12 +89,19 @@ export function SetlistSidebar() {
       </ScrollView>
       <View style={styles.footer}>
         <Button
-          label="＋ Set"
+          icon="plus"
+          label="Set"
           onPress={() => prompt('Nouveau set', `Set ${concert.sets.length + 1}`, actions.addSet)}
           style={styles.flex}
         />
-        <Button label="Crédits" variant="ghost" onPress={() => router.push('/credits')} />
+        <Button
+          icon="info.circle"
+          variant="ghost"
+          accessibilityLabel="Crédits"
+          onPress={() => router.push('/credits')}
+        />
       </View>
+      <PadPanel />
     </View>
   );
 }
@@ -126,6 +135,7 @@ const styles = StyleSheet.create({
   },
   patchSelected: { backgroundColor: colors.accent },
   patchIndex: { color: colors.textMuted, width: 20, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  patchIndexSelected: { color: 'rgba(255,255,255,0.75)' },
   patchName: { color: colors.textDim, fontSize: 16, flex: 1 },
   patchNameSelected: { color: colors.text, fontWeight: '600' },
   footer: {

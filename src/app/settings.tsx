@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import AudioEngine from '../../modules/audio-engine';
@@ -45,12 +46,20 @@ export default function SettingsScreen() {
                 {mapping ? `CC ${mapping.cc} · ${mapping.channel < 0 ? 'omni' : `canal ${mapping.channel + 1}`}` : '—'}
               </Text>
               <Button
+                icon="dot.radiowaves.left.and.right"
                 label={isLearning ? 'Bouge un contrôle…' : 'Apprendre'}
                 active={isLearning}
                 activeColor={colors.warning}
                 onPress={() => (isLearning ? cancelLearn() : startLearn(target))}
               />
-              {mapping && <Button label="✕" variant="danger" onPress={() => removeMapping(mapping.id)} />}
+              {mapping && (
+                <Button
+                  icon="trash"
+                  variant="danger"
+                  accessibilityLabel="Retirer"
+                  onPress={() => removeMapping(mapping.id)}
+                />
+              )}
             </View>
           );
         })}
@@ -71,6 +80,16 @@ export default function SettingsScreen() {
         />
       </Section>
 
+      <Section title="Sons">
+        <View style={styles.row}>
+          <View style={styles.flex}>
+            <Text style={styles.label}>Bibliothèque de sons</Text>
+            <Text style={styles.hint}>Pianos à queue, piano droit complet, Rhodes… à télécharger.</Text>
+          </View>
+          <Button icon="arrow.down.circle" label="Ouvrir" onPress={() => router.push('/library')} />
+        </View>
+      </Section>
+
       <Section title="Clavier Bluetooth MIDI">
         <Text style={styles.hint}>
           Allume le Bluetooth de ton clavier puis « Connecter… ». Une fois connecté, il est mémorisé et l’app s’y
@@ -79,6 +98,7 @@ export default function SettingsScreen() {
         <View style={styles.row}>
           <Text style={[styles.label, styles.flex]}>Connecter un nouveau clavier</Text>
           <Button
+            icon="antenna.radiowaves.left.and.right"
             label="Connecter…"
             onPress={() =>
               AudioEngine.showBluetoothMidi().catch((e) => Alert.alert('Bluetooth MIDI', String(e?.message ?? e)))
@@ -109,6 +129,7 @@ export default function SettingsScreen() {
                 {state === 'connected' ? 'Connecté' : state === 'connecting' ? 'Connexion…' : 'Hors ligne'}
               </Text>
               <Button
+                icon="trash"
                 label="Oublier"
                 variant="danger"
                 onPress={() =>
@@ -138,8 +159,13 @@ export default function SettingsScreen() {
           doivent être installés sur l’appareil qui importe.
         </Text>
         <View style={styles.row}>
-          <Button label="Exporter…" variant="primary" onPress={() => exportConcert(concert).catch(console.warn)} />
-          <Button label="Importer…" onPress={importConcert} />
+          <Button
+            icon="square.and.arrow.up"
+            label="Exporter…"
+            variant="primary"
+            onPress={() => exportConcert(concert).catch(console.warn)}
+          />
+          <Button icon="square.and.arrow.down" label="Importer…" onPress={importConcert} />
         </View>
       </Section>
     </ScrollView>

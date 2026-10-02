@@ -32,6 +32,8 @@ export type LayerConfig = {
   /** -1 = omni, 0...15 */
   midiChannel: number;
   sustainEnabled: boolean;
+  /** false for chord pads: ignore the keyboard, play only notes sent with setLayerNotes. Default true. */
+  keyboard?: boolean;
 };
 
 export type BundledSoundFont = { name: string; path: string };
@@ -39,6 +41,8 @@ export type BundledSoundFont = { name: string; path: string };
 export type SoundFontPreset = { name: string; program: number; bank: number };
 
 export type PluginKind = 'instrument' | 'effect';
+/** `all` lists every Audio Unit type (diagnostics). */
+export type PluginQuery = PluginKind | 'all';
 
 export type PluginInfo = {
   /** "type:subtype:manufacturer" four-char codes. */
@@ -58,6 +62,8 @@ export type PluginParameter = {
   unit: string;
 };
 
+export type PluginPreset = { number: number; name: string };
+
 /** `"instrument"` or an effect id. */
 export type PluginSlot = string;
 
@@ -66,6 +72,22 @@ export type BluetoothMidiDevice = {
   id: string;
   name: string;
   state: 'connected' | 'connecting' | 'disconnected';
+};
+
+export type PerformanceInfo = {
+  /** Average render time of the whole graph since the last call, in % of the buffer duration. */
+  load: number;
+  /** Worst render cycle since the last call, in %. Above 100 % the audio glitches. */
+  peak: number;
+  /** Render cycles over 100 % since the last call. */
+  overloads: number;
+  /** Same measures per layer (instrument + its effects). */
+  layers: { id: string; load: number; peak: number }[];
+  /** CPU used by the app, % of the whole device. */
+  cpu: number;
+  memoryMB: number;
+  /** Memory the app can still use before iOS terminates it. */
+  availableMemoryMB: number;
 };
 
 export type MidiSource = { id: number; name: string };

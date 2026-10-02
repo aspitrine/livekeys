@@ -1,5 +1,5 @@
 import AudioEngine, { type LayerConfig } from '../../modules/audio-engine';
-import type { EffectDef, LayerDef, Patch } from '../model/types';
+import type { EffectDef, LayerDef, Patch, PluginRef } from '../model/types';
 import { useConcert } from '../store/concert';
 import { bankPath, soundKey } from './catalog';
 
@@ -27,9 +27,12 @@ const CONFIG_KEYS: (keyof LayerConfig)[] = [
   'transpose',
   'midiChannel',
   'sustainEnabled',
+  'keyboard',
 ];
 
-const configOf = (layer: LayerDef) => Object.fromEntries(CONFIG_KEYS.map((k) => [k, layer[k]])) as LayerConfig;
+/** Native config of a layer. `keyboard` is derived: chord pads ignore the keyboard. */
+const configOf = (layer: LayerDef) =>
+  ({ ...Object.fromEntries(CONFIG_KEYS.map((k) => [k, layer[k]])), keyboard: !layer.pad }) as LayerConfig;
 
 const instrumentKey = (layer: LayerDef) =>
   layer.plugin ? `plugin:${layer.plugin.componentId}` : `sf:${soundKey(layer.sound)}`;
@@ -162,11 +165,34 @@ async function applyEffects(layerId: string, have: Loaded['effects'], want: Effe
         effect.plugin.state ?? null,
         effect.bypass,
       );
+      if (!effect.plugin.state) applyInitialSetup(layerId, effect.id, effect.plugin);
       next.push({ id: effect.id, bypass: effect.bypass });
     } else if (existing.bypass !== effect.bypass) {
       AudioEngine.setEffectBypass(layerId, effect.id, effect.bypass);
       existing.bypass = effect.bypass;
     }
   }
+  // Effects were reordered: rewire the chain in the stored order.
+  const order = want.map((e) => e.id);
+  if (next.map((e) => e.id).join() !== order.join()) {
+    AudioEngine.setEffectOrder(layerId, order);
+    next.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  }
   return next;
+}
+
+/** Ready-to-use effects: select their factory preset, then set their parameters. */
+function applyInitialSetup(layerId: string, slot: string, plugin: PluginRef) {
+  try {
+    if (plugin.preset) {
+      const { presets } = AudioEngine.getPluginPresets(layerId, slot);
+      const match = presets.find((p) => p.name === plugin.preset);
+      if (match) AudioEngine.selectPluginPreset(layerId, slot, match.number);
+    }
+    for (const [address, value] of Object.entries(plugin.params ?? {})) {
+      AudioEngine.setPluginParameter(layerId, slot, Number(address), value);
+    }
+  } catch (e) {
+    console.warn('[engine sync] effect setup', plugin.name, e);
+  }
 }

@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import AudioEngine, { type PluginParameter, PluginEditorView } from '../../../modules/audio-engine';
 import { Button } from '../../components/Button';
+import { PresetPicker } from '../../components/PresetPicker';
 import { capturePluginStates } from '../../engine/sync';
 import { selectLayer, useConcert } from '../../store/concert';
 import { colors } from '../../theme';
@@ -18,7 +19,9 @@ export default function PluginScreen() {
   const layer = useConcert(selectLayer(layerId));
   const [hasView, setHasView] = useState<boolean | null>(null);
 
-  const plugin = slot === 'instrument' ? layer?.plugin : layer?.effects.find((e) => e.id === slot)?.plugin;
+  const effect = slot === 'instrument' ? undefined : layer?.effects.find((e) => e.id === slot);
+  const plugin = effect ? effect.plugin : layer?.plugin;
+  const setEffectBypass = useConcert((s) => s.setEffectBypass);
 
   // Persist whatever was tweaked, whichever way the screen is closed.
   useEffect(() => () => void capturePluginStates(layerId, selectLayer(layerId)(useConcert.getState())), [layerId]);
@@ -27,8 +30,30 @@ export default function PluginScreen() {
     <View style={styles.screen}>
       <Stack.Screen options={{ title: plugin ? `${plugin.name} · ${plugin.manufacturer}` : 'Plugin' }} />
       <View style={styles.toolbar}>
+        <PresetPicker layerId={layerId} slot={slot} reloadKey={hasView} />
         <Text style={styles.hint}>Les réglages sont sauvegardés dans le patch à la fermeture.</Text>
-        <Button label="Terminé" variant="primary" onPress={() => router.back()} />
+        {effect && (
+          <Button
+            icon="power"
+            label={effect.bypass ? 'Désactivé' : 'Activé'}
+            active={!effect.bypass}
+            activeColor={colors.success}
+            accessibilityLabel={effect.bypass ? 'Activer l’effet' : 'Désactiver l’effet'}
+            onPress={() => setEffectBypass(layerId, effect.id, !effect.bypass)}
+          />
+        )}
+        {effect && (
+          <Button
+            icon="trash"
+            label="Retirer l’effet"
+            variant="danger"
+            onPress={() => {
+              router.back();
+              useConcert.getState().removeEffect(layerId, slot);
+            }}
+          />
+        )}
+        <Button icon="checkmark" label="Terminé" variant="primary" onPress={() => router.back()} />
       </View>
       <View style={styles.editor}>
         <PluginEditorView

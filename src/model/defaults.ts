@@ -31,6 +31,15 @@ export function makeLayer(sound: SoundRef, index: number, config: Partial<LayerC
   };
 }
 
+/** A chord pad following the keyboard, on a warm pad sound. */
+export function makePadLayer(index: number): LayerDef {
+  return {
+    ...makeLayer(SOUNDS.warmPad, index, { volume: 0.5 }),
+    name: 'Pad',
+    pad: { mode: 'follow', chord: { root: 0, quality: 'maj' }, base: 48, playing: true },
+  };
+}
+
 export function makePatch(name: string, layers: { sound: SoundRef; config?: Partial<LayerConfig> }[]): Patch {
   return { id: newId(), name, layers: layers.map((l, i) => makeLayer(l.sound, i, l.config)) };
 }

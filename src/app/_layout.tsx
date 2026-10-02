@@ -28,6 +28,8 @@ export default function RootLayout() {
         <Stack.Screen name="plugin/[layerId]" options={{ presentation: 'fullScreenModal', title: 'Plugin' }} />
         <Stack.Screen name="settings" options={{ presentation: 'modal', title: 'Réglages' }} />
         <Stack.Screen name="stage" options={{ presentation: 'fullScreenModal', headerShown: false }} />
+        <Stack.Screen name="library" options={{ presentation: 'modal', title: 'Bibliothèque de sons' }} />
+        <Stack.Screen name="performance" options={{ presentation: 'modal', title: 'Performance' }} />
         <Stack.Screen name="credits" options={{ presentation: 'modal', title: 'Crédits' }} />
       </Stack>
     </SafeAreaProvider>

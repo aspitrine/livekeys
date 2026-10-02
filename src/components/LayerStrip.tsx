@@ -1,31 +1,50 @@
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActionSheetIOS, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { noteName } from '../lib/notes';
 import type { LayerDef } from '../model/types';
 import { useConcert } from '../store/concert';
 import { colors } from '../theme';
 import { Button } from './Button';
+import { EffectSlots, InstrumentSlot } from './EffectSlots';
 import { Fader } from './Fader';
 
-/** Mixer channel strip for one layer: name, sound, range, fader, mute/solo. */
-export function LayerStrip({ layer }: { layer: LayerDef }) {
+/** Mixer channel strip for one layer: name, sound, range, fader, mute/solo, insert effects. */
+/** `fxRows`: Audio FX rows to reserve, same for every strip of the patch. */
+export function LayerStrip({ layer, fxRows }: { layer: LayerDef; fxRows: number }) {
   const updateLayer = useConcert((s) => s.updateLayer);
   const update = (patch: Partial<LayerDef>) => updateLayer(layer.id, patch);
   const edit = () => router.push({ pathname: '/layer/[id]', params: { id: layer.id } });
+  const moveLayer = useConcert((s) => s.moveLayer);
+  const menu = () =>
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: layer.name,
+        options: ['Éditer', 'Déplacer à gauche', 'Déplacer à droite', 'Annuler'],
+        cancelButtonIndex: 3,
+      },
+      (i) => {
+        if (i === 0) edit();
+        if (i === 1) moveLayer(layer.id, -1);
+        if (i === 2) moveLayer(layer.id, 1);
+      },
+    );
 
   return (
     <View style={styles.strip}>
       <View style={[styles.colorBar, { backgroundColor: layer.color }]} />
-      <Pressable onPress={edit} style={styles.head}>
+      <Pressable onPress={edit} onLongPress={menu} style={styles.head}>
         <Text style={styles.name} numberOfLines={1}>
           {layer.name}
         </Text>
         <Text style={styles.meta} numberOfLines={1}>
-          {noteName(layer.keyLow)}–{noteName(layer.keyHigh)}
-          {layer.transpose !== 0 && `  ${layer.transpose > 0 ? '+' : ''}${layer.transpose}`}
+          {layer.pad ? 'Pad d’accords' : `${noteName(layer.keyLow)}–${noteName(layer.keyHigh)}`}
+          {!layer.pad && layer.transpose !== 0 && `  ${layer.transpose > 0 ? '+' : ''}${layer.transpose}`}
         </Text>
       </Pressable>
+
+      <InstrumentSlot layer={layer} />
+      <EffectSlots layer={layer} rows={fxRows} />
 
       <Fader value={layer.volume} onChange={(volume) => update({ volume })} color={layer.color} />
       <Text style={styles.volume}>{Math.round(layer.volume * 100)}</Text>
@@ -46,7 +65,7 @@ export function LayerStrip({ layer }: { layer: LayerDef }) {
           style={styles.flex}
         />
       </View>
-      <Button label="Éditer" variant="ghost" onPress={edit} />
+      <Button icon="slider.horizontal.3" label="Éditer" variant="ghost" size="sm" onPress={edit} />
     </View>
   );
 }

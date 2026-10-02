@@ -3,7 +3,8 @@ import UIKit
 
 /// Wraps Apple's Bluetooth MIDI central picker in a dismissable sheet.
 enum BluetoothMidi {
-  static func present() throws {
+  /// `onClose` runs when the user taps Done.
+  static func present(onClose: @escaping () -> Void) throws {
     #if targetEnvironment(simulator)
     // The simulator has no Bluetooth: Apple's picker crashes while laying out its table.
     throw BluetoothMidiError.unavailable
@@ -13,7 +14,10 @@ enum BluetoothMidi {
     picker.preferredContentSize = CGSize(width: 540, height: 600)
     picker.navigationItem.rightBarButtonItem = UIBarButtonItem(
       systemItem: .done,
-      primaryAction: UIAction { [weak picker] _ in picker?.dismiss(animated: true) }
+      primaryAction: UIAction { [weak picker] _ in
+        picker?.dismiss(animated: true)
+        onClose()
+      }
     )
     let nav = UINavigationController(rootViewController: picker)
     nav.modalPresentationStyle = .formSheet

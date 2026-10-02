@@ -1,0 +1,122 @@
+import AVFoundation
+import Darwin
+
+/// Written on the audio thread by the render notify, read (and reset) from the JS thread.
+/// Plain values, no locks: readings are approximate by design and never block audio.
+struct RenderStats {
+  var start: UInt64 = 0
+  /// Sum of per-cycle loads (1.0 = the whole buffer duration was spent rendering).
+  var sum: Double = 0
+  var count: UInt32 = 0
+  var peak: Double = 0
+  /// Cycles that took longer than the buffer: audible glitches.
+  var overloads: UInt32 = 0
+  var secondsPerTick: Double = 0
+  var sampleRate: Double = 48_000
+}
+
+/// Times the render of one Audio Unit (and everything it pulls upstream) against the buffer duration.
+final class RenderMeter {
+  private let stats = UnsafeMutablePointer<RenderStats>.allocate(capacity: 1)
+  private var unit: AudioUnit?
+
+  init() {
+    stats.initialize(to: RenderStats())
+    var timebase = mach_timebase_info_data_t()
+    mach_timebase_info(&timebase)
+    stats.pointee.secondsPerTick = Double(timebase.numer) / Double(timebase.denom) / 1e9
+  }
+
+  deinit {
+    detach()
+    stats.deallocate()
+  }
+
+  func attach(_ unit: AudioUnit, sampleRate: Double) {
+    detach()
+    stats.pointee.sampleRate = sampleRate > 0 ? sampleRate : 48_000
+    if AudioUnitAddRenderNotify(unit, renderNotify, UnsafeMutableRawPointer(stats)) == noErr {
+      self.unit = unit
+    }
+  }
+
+  func detach() {
+    guard let unit else { return }
+    AudioUnitRemoveRenderNotify(unit, renderNotify, UnsafeMutableRawPointer(stats))
+    self.unit = nil
+  }
+
+  /// Average and peak load since the previous read (1.0 = 100 % of the buffer), and overloads.
+  func read() -> (average: Double, peak: Double, overloads: Int) {
+    let s = stats.pointee
+    stats.pointee.sum = 0
+    stats.pointee.count = 0
+    stats.pointee.peak = 0
+    stats.pointee.overloads = 0
+    return (s.count > 0 ? s.sum / Double(s.count) : 0, s.peak, Int(s.overloads))
+  }
+}
+
+/// Runs on the audio thread: no allocation, no lock, no Swift runtime calls beyond plain arithmetic.
+private let renderNotify: AURenderCallback = { refCon, flags, _, bus, frames, _ in
+  guard bus == 0 else { return noErr }
+  let s = refCon.assumingMemoryBound(to: RenderStats.self)
+  if flags.pointee.contains(.unitRenderAction_PreRender) {
+    s.pointee.start = mach_absolute_time()
+  } else if flags.pointee.contains(.unitRenderAction_PostRender), s.pointee.start != 0 {
+    let elapsed = Double(mach_absolute_time() &- s.pointee.start) * s.pointee.secondsPerTick
+    let budget = Double(frames) / s.pointee.sampleRate
+    let load = budget > 0 ? elapsed / budget : 0
+    s.pointee.sum += load
+    s.pointee.count &+= 1
+    if load > s.pointee.peak { s.pointee.peak = load }
+    if load > 1 { s.pointee.overloads &+= 1 }
+    s.pointee.start = 0
+  }
+  return noErr
+}
+
+/// Process-wide figures: CPU of all app threads and memory.
+enum SystemStats {
+  /// CPU used by the app, in % of the whole device (all cores).
+  static func cpuPercent() -> Double {
+    var threads: thread_act_array_t?
+    var count: mach_msg_type_number_t = 0
+    guard task_threads(mach_task_self_, &threads, &count) == KERN_SUCCESS, let threads else { return 0 }
+    defer {
+      vm_deallocate(mach_task_self_, vm_address_t(bitPattern: threads), vm_size_t(Int(count) * MemoryLayout<thread_t>.stride))
+    }
+    var total = 0.0
+    for i in 0..<Int(count) {
+      var info = thread_basic_info()
+      var infoCount = mach_msg_type_number_t(THREAD_INFO_MAX)
+      let kr = withUnsafeMutablePointer(to: &info) {
+        $0.withMemoryRebound(to: integer_t.self, capacity: Int(infoCount)) {
+          thread_info(threads[i], thread_flavor_t(THREAD_BASIC_INFO), $0, &infoCount)
+        }
+      }
+      if kr == KERN_SUCCESS, info.flags & TH_FLAGS_IDLE == 0 {
+        total += Double(info.cpu_usage) / Double(TH_USAGE_SCALE)
+      }
+      mach_port_deallocate(mach_task_self_, threads[i])
+    }
+    return total * 100 / Double(max(ProcessInfo.processInfo.activeProcessorCount, 1))
+  }
+
+  /// Memory used by the app (what iOS counts against its limit), in MB.
+  static func memoryMB() -> Double {
+    var info = task_vm_info_data_t()
+    var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
+    let kr = withUnsafeMutablePointer(to: &info) {
+      $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+        task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+      }
+    }
+    return kr == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : 0
+  }
+
+  /// Memory the app can still use before iOS terminates it, in MB.
+  static func availableMemoryMB() -> Double {
+    Double(os_proc_available_memory()) / 1_048_576
+  }
+}

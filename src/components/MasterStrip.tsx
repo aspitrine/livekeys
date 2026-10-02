@@ -1,9 +1,8 @@
-import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useConcert } from '../store/concert';
 import { colors } from '../theme';
-import { Button } from './Button';
+import { Icon } from './Icon';
 import { Fader } from './Fader';
 
 export function MasterStrip() {
@@ -13,11 +12,13 @@ export function MasterStrip() {
 
   return (
     <View style={styles.strip}>
-      <Text style={styles.name}>Master</Text>
+      <View style={styles.head}>
+        <Icon name="speaker.wave.2.fill" size={14} color={colors.textDim} />
+        <Text style={styles.name}>Master</Text>
+      </View>
       <Text style={styles.meta}>{limiter ? 'Limiteur actif' : 'Sans limiteur'}</Text>
       <Fader value={volume} onChange={setMasterVolume} color={colors.text} />
       <Text style={styles.volume}>{Math.round(volume * 100)}</Text>
-      <Button label="Réglages" variant="ghost" onPress={() => router.push('/settings')} />
     </View>
   );
 }
@@ -31,7 +32,8 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'center',
   },
-  name: { color: colors.text, fontSize: 15, fontWeight: '700', alignSelf: 'stretch' },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'stretch' },
+  name: { color: colors.text, fontSize: 15, fontWeight: '700' },
   meta: { color: colors.textMuted, fontSize: 12, alignSelf: 'stretch' },
   volume: { color: colors.textDim, fontVariant: ['tabular-nums'] },
 });

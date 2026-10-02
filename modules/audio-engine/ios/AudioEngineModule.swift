@@ -50,12 +50,15 @@ public class AudioEngineModule: Module {
 
     Function("panic") { self.mixer.panic() }
 
+    /// Load figures since the previous call (call it at a steady pace, e.g. once per second).
+    Function("getPerformance") { self.mixer.performance() }
+
     Function("setLimiterEnabled") { (enabled: Bool) in self.mixer.limiterEnabled = enabled }
 
     /// Presents the system Bluetooth MIDI pairing screen.
     AsyncFunction("showBluetoothMidi") {
       self.bleMidi.prepare()
-      try BluetoothMidi.present()
+      try BluetoothMidi.present { [weak self] in self?.midi.refresh() }
     }.runOnQueue(.main)
 
     /// BLE MIDI keyboards currently connected (to remember them for auto-reconnect).
@@ -74,6 +77,11 @@ public class AudioEngineModule: Module {
 
     Function("setActiveLayers") { (ids: [String]) in
       self.mixer.setActiveLayers(ids)
+    }
+
+    /// Chord pads: the layer holds exactly these notes ([] releases them).
+    Function("setLayerNotes") { (layerId: String, notes: [Int], velocity: Int, fade: Double) in
+      self.mixer.setLayerNotes(layerId: layerId, notes: notes, velocity: velocity, fade: fade)
     }
 
     Function("updateLayer") { (id: String, config: LayerConfigRecord) in
@@ -123,6 +131,10 @@ public class AudioEngineModule: Module {
       try self.mixer.removeEffect(layerId: layerId, effectId: effectId)
     }
 
+    Function("setEffectOrder") { (layerId: String, ids: [String]) in
+      try self.mixer.setEffectOrder(layerId: layerId, ids: ids)
+    }
+
     Function("setEffectBypass") { (layerId: String, effectId: String, bypass: Bool) in
       try self.mixer.setEffectBypass(layerId: layerId, effectId: effectId, bypass: bypass)
     }
@@ -134,6 +146,14 @@ public class AudioEngineModule: Module {
 
     Function("getPluginParameters") { (layerId: String, slot: String) -> [[String: Any]] in
       PluginHost.parameters(of: try self.mixer.unit(layerId: layerId, slot: slot))
+    }
+
+    Function("getPluginPresets") { (layerId: String, slot: String) -> [String: Any] in
+      PluginHost.presets(of: try self.mixer.unit(layerId: layerId, slot: slot))
+    }
+
+    Function("selectPluginPreset") { (layerId: String, slot: String, number: Int) in
+      PluginHost.selectPreset(of: try self.mixer.unit(layerId: layerId, slot: slot), number: number)
     }
 
     Function("setPluginParameter") { (layerId: String, slot: String, address: Double, value: Double) in
@@ -150,6 +170,9 @@ public class AudioEngineModule: Module {
     // MARK: MIDI
 
     Function("getMidiSources") { self.midi.sources().map(Self.serialize) }
+
+    /// Re-scans MIDI sources (app back to foreground, Bluetooth picker closed…).
+    Function("refreshMidi") { self.midi.refresh() }
 
     Function("setMidiMonitorEnabled") { (enabled: Bool) in self.midiMonitor = enabled }
 

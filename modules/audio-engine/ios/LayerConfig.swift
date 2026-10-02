@@ -14,14 +14,18 @@ struct LayerConfig {
   /// -1 = omni, 0...15 = MIDI channel
   var midiChannel = -1
   var sustainEnabled = true
+  /// false for chord pads: the layer ignores the keyboard and only plays notes sent with `setLayerNotes`.
+  var keyboard = true
 
   func accepts(note: UInt8, velocity: UInt8, channel: UInt8) -> Bool {
+    guard keyboard else { return false }
     if midiChannel >= 0 && Int(channel) != midiChannel { return false }
     return (keyLow...keyHigh).contains(note) && (velocityLow...velocityHigh).contains(velocity)
   }
 
   func listens(on channel: UInt8) -> Bool {
-    midiChannel < 0 || Int(channel) == midiChannel
+    guard keyboard else { return false }
+    return midiChannel < 0 || Int(channel) == midiChannel
   }
 
   mutating func apply(_ patch: LayerConfigRecord) {
@@ -36,6 +40,7 @@ struct LayerConfig {
     if let v = patch.transpose { transpose = min(max(v, -48), 48) }
     if let v = patch.midiChannel { midiChannel = min(max(v, -1), 15) }
     if let v = patch.sustainEnabled { sustainEnabled = v }
+    if let v = patch.keyboard { keyboard = v }
     if keyLow > keyHigh { swap(&keyLow, &keyHigh) }
     if velocityLow > velocityHigh { swap(&velocityLow, &velocityHigh) }
   }
@@ -56,6 +61,7 @@ struct LayerConfigRecord: Record {
   @Field var transpose: Int?
   @Field var midiChannel: Int?
   @Field var sustainEnabled: Bool?
+  @Field var keyboard: Bool?
 }
 
 struct EngineOptions: Record {

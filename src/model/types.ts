@@ -1,4 +1,5 @@
 import type { LayerConfig } from '../../modules/audio-engine';
+import type { Chord } from '../lib/chords';
 
 /** A preset inside a bundled sound bank. */
 export type SoundRef = {
@@ -17,6 +18,9 @@ export type PluginRef = {
   manufacturer: string;
   /** Base64 plist from the AU's fullState, captured when its editor closes or its patch unloads. */
   state?: string;
+  /** Initial setup when there is no saved state yet: factory preset name, then parameter values by address. */
+  preset?: string;
+  params?: Record<string, number>;
 };
 
 export type EffectDef = { id: string; plugin: PluginRef; bypass: boolean };
@@ -30,6 +34,21 @@ export type LayerDef = LayerConfig & {
   /** AUv3 instrument replacing the SoundFont sampler. */
   plugin?: PluginRef;
   effects: EffectDef[];
+  /** Set on chord-pad layers: they ignore the keyboard and hold a chord. */
+  pad?: PadConfig;
+};
+
+/** Chord pad: holds the chord detected from the keyboard (`follow`) or a chosen one (`fixed`). */
+export type PadConfig = {
+  mode: 'follow' | 'fixed';
+  /** Chord played in `fixed` mode. */
+  chord: Chord;
+  /** MIDI note of the C the voicing is built around (48 = C3). */
+  base: number;
+  /** Pad on/off. Starts on when its patch is selected. */
+  playing: boolean;
+  /** Crossfade between chords, in seconds (default 2). */
+  fade?: number;
 };
 
 export type Patch = { id: string; name: string; layers: LayerDef[] };
@@ -43,6 +62,7 @@ export type MappingTarget =
   | { kind: 'layerVolume'; index: number }
   | { kind: 'nextPatch' }
   | { kind: 'prevPatch' }
+  | { kind: 'padToggle' }
   | { kind: 'panic' };
 
 export type MidiMapping = {
