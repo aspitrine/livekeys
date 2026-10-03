@@ -1,5 +1,6 @@
 {
   "name": "livekeys-website",
+  "license": "MIT-0",
   "private": true,
   "type": "module",
   "scripts": {

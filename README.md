@@ -13,6 +13,7 @@ Application iPad pour les claviéristes en live : layers, splits, setlists et pl
 ![Expo](https://img.shields.io/badge/Expo-SDK%2057-000020)
 ![React Native](https://img.shields.io/badge/React%20Native-0.86-61dafb)
 ![Swift](https://img.shields.io/badge/moteur%20audio-Swift%20%2F%20C%2B%2B-f05138)
+![Licence](https://img.shields.io/badge/licence-MIT--0-blue)
 
 <img src="website/public/screenshots/stage.png" alt="Mode scène de LiveKeys sur iPad" width="420">
 
@@ -31,6 +32,7 @@ Application iPad pour les claviéristes en live : layers, splits, setlists et pl
 - [Qualité et tests](#qualité-et-tests)
 - [Site de présentation](#site-de-présentation)
 - [Crédits des sons](#crédits-des-sons)
+- [Licence](#licence)
 
 ## Présentation
 
@@ -323,6 +325,13 @@ sur `main`.
 
 Les licences complètes sont fournies avec les banques dans `modules/audio-engine/ios/SoundFonts/` et rappelées dans
 l’écran Crédits de l’application.
+
+## Licence
+
+Le code source de LiveKeys et de son site est distribué sous licence [MIT No Attribution (MIT-0)](LICENSE) :
+utilisation, modification, redistribution et usage commercial libres, **sans obligation de citer l’auteur**.
+
+Les banques de sons intégrées restent soumises à leurs propres licences (voir [Crédits des sons](#crédits-des-sons)).
 
 ---
 
