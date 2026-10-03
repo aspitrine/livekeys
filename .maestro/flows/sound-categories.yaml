@@ -1,0 +1,26 @@
+appId: net.eliakim.livekeys
+name: Browse reclassified drum kits, woodwinds and pads
+---
+- runFlow: ../helpers/launch.yaml
+- tapOn: 'Instrument : Upright piano KW'
+- assertVisible: 'Upright piano KW,.*'
+- assertNotVisible: 'Standard 1 Kit,.*'
+- assertNotVisible: 'Honky-Tonk Piano,.*'
+- tapOn: '.*Batteries & percussions,.*'
+- tapOn: 'Standard 1 Kit, GeneralUser GS.*'
+- tapOn: '.*Terminé'
+- assertVisible: 'Instrument : Standard 1 Kit'
+- tapOn: 'Instrument : Standard 1 Kit'
+- assertVisible: 'Standard 1 Kit,.*'
+- tapOn: '.*Cuivres & vents,.*'
+- tapOn: 'Saxophones & bois,.*'
+- tapOn: 'Woodwind Choir, GeneralUser GS.*'
+- tapOn: '.*Terminé'
+- assertVisible: 'Instrument : Woodwind Choir'
+- tapOn: 'Instrument : Woodwind Choir'
+- assertVisible: 'Woodwind Choir,.*'
+- assertNotVisible: 'Fast Strings,.*'
+- tapOn: '.*Synthés,.*'
+- tapOn: 'Orchestra Pad, GeneralUser GS.*'
+- tapOn: '.*Terminé'
+- assertVisible: 'Instrument : Orchestra Pad'

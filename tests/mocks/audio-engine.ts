@@ -31,4 +31,5 @@ export default {
     { name: 'GeneralUser-GS', path: '/test/GeneralUser-GS.sf2' },
     { name: 'UprightPianoKW-small', path: '/test/UprightPianoKW-small.sf2' },
   ]),
+  getSoundFontPresets: jest.fn(),
 };
