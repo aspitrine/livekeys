@@ -1,0 +1,32 @@
+{
+  "name": "livekeys-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev --host 127.0.0.1 --port 3001",
+    "generate": "nuxt generate",
+    "preview": "serve .output/public --listen tcp://127.0.0.1:4173 --no-clipboard",
+    "postinstall": "nuxt prepare",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "lint": "oxlint --max-warnings 0 .",
+    "typecheck": "nuxt typecheck",
+    "test": "playwright test",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run generate && npm test"
+  },
+  "dependencies": {
+    "@fontsource-variable/manrope": "5.3.0",
+    "gsap": "3.15.0",
+    "nuxt": "4.5.2",
+    "vue": "3.5.43"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.11.1",
+    "@playwright/test": "1.63.0",
+    "oxfmt": "^0.71.0",
+    "oxlint": "^1.86.0",
+    "serve": "^14.2.5",
+    "typescript": "~6.0.3",
+    "vue-tsc": "^3.1.0"
+  }
+}

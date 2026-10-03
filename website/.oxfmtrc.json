@@ -1,0 +1,13 @@
+{
+  "singleQuote": true,
+  "printWidth": 120,
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "node_modules/**",
+    ".nuxt/**",
+    ".output/**",
+    "package-lock.json",
+    "test-results/**",
+    "playwright-report/**"
+  ]
+}

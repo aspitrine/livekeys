@@ -1,0 +1,29 @@
+appId: net.eliakim.livekeys
+---
+# Run only on the dedicated iOS simulator: the launch helper resets its app data.
+- runFlow: ../../.maestro/helpers/launch.yaml
+- setOrientation: LANDSCAPE_LEFT
+- tapOn: 'Patch suivant'
+- assertVisible: 'Piano \+ Pad'
+- waitForAnimationToEnd
+- takeScreenshot: layers
+- tapOn: 'Mode scène'
+- assertVisible: '.*PANIC'
+- waitForAnimationToEnd
+- takeScreenshot: stage
+- tapOn: '.*Quitter'
+- tapOn: 'Patch suivant'
+- assertVisible: 'Basse / EP'
+- waitForAnimationToEnd
+- takeScreenshot: split
+- tapOn:
+    text: 'Ajouter un effet'
+    index: 0
+- assertVisible: 'Rechercher un effet…'
+- waitForAnimationToEnd
+- takeScreenshot: effects
+- tapOn: '.*Salle de concert.*'
+- tapOn: '.*Salle de concert.*'
+- assertVisible: '.*Terminé'
+- waitForAnimationToEnd
+- takeScreenshot: effect-editor
