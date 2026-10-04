@@ -2,6 +2,7 @@ import AudioEngine from '../../modules/audio-engine';
 import {
   cancelLearn,
   handleControlChange,
+  hostOwnedControls,
   sameTarget,
   startLearn,
   targetLabel,
@@ -109,4 +110,108 @@ test.each([120, 123])('MIDI command %s stops pads even with value zero and no ma
   expect(usePadChord.getState().detected).toBeNull();
   updatePads();
   expect(AudioEngine.setLayerNotes).toHaveBeenLastCalledWith(padId, [], 90, 2);
+});
+
+test('pickup prevents jumps, acquires on crossing and rearms on a different patch or a UI edit', () => {
+  const store = useConcert.getState();
+  store.addMapping({ cc: 30, channel: 0, target: { kind: 'layerVolume', index: 0 }, pickup: true });
+  handleControlChange(0, 30, 20);
+  expect(selectCurrentPatch(useConcert.getState())!.layers[0].volume).toBe(0.8);
+  handleControlChange(0, 30, 110);
+  expect(selectCurrentPatch(useConcert.getState())!.layers[0].volume).toBe(0.87);
+  handleControlChange(0, 30, 64);
+  expect(selectCurrentPatch(useConcert.getState())!.layers[0].volume).toBe(0.5);
+  store.stepPatch(1);
+  handleControlChange(0, 30, 20);
+  expect(selectCurrentPatch(useConcert.getState())!.layers[0].volume).toBe(0.8);
+  handleControlChange(0, 30, 102);
+  expect(selectCurrentPatch(useConcert.getState())!.layers[0].volume).toBe(0.8);
+  handleControlChange(0, 30, 64);
+  expect(selectCurrentPatch(useConcert.getState())!.layers[0].volume).toBe(0.5);
+  const layer = selectCurrentPatch(useConcert.getState())!.layers[0];
+  store.updateLayer(layer.id, { volume: 0.3 });
+  handleControlChange(0, 30, 90);
+  expect(selectCurrentPatch(useConcert.getState())!.layers[0].volume).toBe(0.3);
+  handleControlChange(0, 30, 20);
+  expect(selectCurrentPatch(useConcert.getState())!.layers[0].volume).toBe(0.16);
+});
+
+test('master pickup handles downward crossing and can be disabled for immediate control', () => {
+  const store = useConcert.getState();
+  store.setMasterVolume(0.4);
+  store.addMapping({ cc: 31, channel: -1, target: { kind: 'masterVolume' }, pickup: true });
+  const mapping = useConcert.getState().concert.mappings[0];
+  handleControlChange(0, 31, 110);
+  expect(useConcert.getState().masterVolume).toBe(0.4);
+  handleControlChange(0, 31, 10);
+  expect(useConcert.getState().masterVolume).toBeCloseTo(10 / 127);
+  store.setMappingPickup(mapping.id, false);
+  handleControlChange(0, 31, 127);
+  expect(useConcert.getState().masterVolume).toBe(1);
+  store.removeMapping(mapping.id);
+});
+
+test('a MIDI button mutes the current layer once per press and follows patch changes', () => {
+  const store = useConcert.getState();
+  store.addMapping({ cc: 36, channel: 0, target: { kind: 'layerMute', index: 0 } });
+  handleControlChange(0, 36, 0);
+  handleControlChange(0, 36, 127);
+  handleControlChange(0, 36, 127);
+  expect(selectCurrentPatch(useConcert.getState())!.layers[0].mute).toBe(true);
+  store.stepPatch(1);
+  handleControlChange(0, 36, 0);
+  handleControlChange(0, 36, 127);
+  expect(selectCurrentPatch(useConcert.getState())!.layers[0].mute).toBe(true);
+  handleControlChange(0, 36, 0);
+  handleControlChange(0, 36, 127);
+  expect(selectCurrentPatch(useConcert.getState())!.layers[0].mute).toBe(false);
+  expect(targetLabel({ kind: 'layerMute', index: 0 })).toBe('Layer 1 on / off');
+  expect(sameTarget({ kind: 'layerMute', index: 0 }, { kind: 'layerMute', index: 1 })).toBe(false);
+  store.addMapping({ cc: 37, channel: 0, target: { kind: 'layerMute', index: 99 } });
+  expect(() => handleControlChange(0, 37, 127)).not.toThrow();
+});
+
+test('mute buttons and faders are kept away from instruments, patch buttons are not', () => {
+  startLearn({ kind: 'layerMute', index: 2 });
+  expect(AudioEngine.setMidiVolumeLearn).toHaveBeenLastCalledWith(true);
+  startLearn({ kind: 'nextPatch' });
+  expect(AudioEngine.setMidiVolumeLearn).toHaveBeenLastCalledWith(false);
+  cancelLearn();
+  expect(
+    hostOwnedControls([
+      { id: 'a', cc: 7, channel: -1, target: { kind: 'masterVolume' } },
+      { id: 'b', cc: 20, channel: 1, target: { kind: 'layerVolume', index: 0 } },
+      { id: 'c', cc: 36, channel: 0, target: { kind: 'layerMute', index: 1 } },
+      { id: 'd', cc: 50, channel: 0, target: { kind: 'nextPatch' } },
+    ]),
+  ).toEqual([
+    { cc: 7, channel: -1 },
+    { cc: 20, channel: 1 },
+    { cc: 36, channel: 0 },
+  ]);
+});
+
+test('« Layer N » MIDI controls count mixer layers only, never the chord pad', () => {
+  const store = useConcert.getState();
+  const patch = selectCurrentPatch(store)!;
+  const padId = store.addPadLayer(patch.id);
+  // Put the pad first in the stored order: it must still not take a layer number.
+  store.placeLayer(patch.layers[0].id, 0);
+  useConcert.setState(({ concert }) => ({
+    concert: {
+      ...concert,
+      sets: concert.sets.map((s) => ({
+        ...s,
+        patches: s.patches.map((p) => (p.id === patch.id ? { ...p, layers: [...p.layers].reverse() } : p)),
+      })),
+    },
+  }));
+  expect(selectCurrentPatch(useConcert.getState())!.layers[0].id).toBe(padId);
+  store.addMapping({ cc: 40, channel: 0, target: { kind: 'layerMute', index: 0 } });
+  store.addMapping({ cc: 41, channel: 0, target: { kind: 'layerVolume', index: 0 } });
+  handleControlChange(0, 40, 127);
+  handleControlChange(0, 41, 0);
+  const layers = selectCurrentPatch(useConcert.getState())!.layers;
+  expect(layers.find((l) => l.id === padId)).toMatchObject({ mute: false, volume: 0.1 });
+  expect(layers.find((l) => l.id === patch.layers[0].id)).toMatchObject({ mute: true, volume: 0 });
 });

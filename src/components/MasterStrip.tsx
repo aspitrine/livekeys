@@ -3,16 +3,22 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import AudioEngine from '../../modules/audio-engine';
 
+import { type EffectDef, MASTER_ID } from '../model/types';
 import { useConcert } from '../store/concert';
 import { colors } from '../theme';
+import { EffectSlots } from './EffectSlots';
 import { Icon } from './Icon';
 import { Fader } from './Fader';
+import { MidiPickupHint } from './MidiPickupHint';
 import { reductionColor } from './LevelMeter';
+
+const EMPTY: EffectDef[] = [];
 
 export function MasterStrip() {
   const volume = useConcert((s) => s.masterVolume);
   const limiter = useConcert((s) => s.settings.limiter);
   const setMasterVolume = useConcert((s) => s.setMasterVolume);
+  const effects = useConcert((s) => s.concert.masterEffects ?? EMPTY);
 
   return (
     <View style={styles.strip}>
@@ -21,8 +27,11 @@ export function MasterStrip() {
         <Text style={styles.name}>Master</Text>
       </View>
       <LimiterStatus enabled={limiter} />
+      {/* Inserts on the whole mix, before the limiter (a shared reverb, an EQ…). Same for every patch. */}
+      <EffectSlots hostId={MASTER_ID} effects={effects} rows={effects.length + 1} />
       <Fader value={volume} onChange={setMasterVolume} color={colors.text} />
       <Text style={styles.volume}>{Math.round(volume * 100)}</Text>
+      <MidiPickupHint target={{ kind: 'masterVolume' }} />
     </View>
   );
 }

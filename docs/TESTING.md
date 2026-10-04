@@ -31,7 +31,7 @@ Oxfmt retains the existing single quotes and 120-column style; it replaces the o
   React Native Testing Library. Only native audio and SQLite calls are substituted; navigation calls are mocked in Jest.
 - `.maestro/flows/`: actual app navigation, stage mode, pad play/stop and panic.
 - `tests/native/`: production pad gain/generation rules, real Apple sampler panic and preset recovery,
-  and concurrent DSP counter reads. SwiftPM builds the same safety sources included by the iOS pod;
+  concurrent DSP counter reads and the lock-free musical clock (tempo/beat position given to AUv3 plugins). SwiftPM builds the same safety sources included by the iOS pod;
   Thread Sanitizer checks these tests for data races. This does not compile the entire iOS engine.
 
 Coverage thresholds apply to the ten critical JS/TS files explicitly listed in `jest.config.cjs` (80% lines/statements,

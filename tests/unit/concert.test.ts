@@ -126,32 +126,75 @@ test('one controller mapping replaces the previous mapping on the same channel',
   expect(useConcert.getState().concert.mappings).toEqual([]);
 });
 
-test('older concerts get a reverb send, except layers that already have their own reverb insert', () => {
+test('older concerts drop the shared reverb sends and get an empty master effect chain', () => {
   const migrate = useConcert.persist.getOptions().migrate!;
   const concert = useConcert.getState().concert;
   const [first] = concert.sets[0].patches;
-  const plain = { ...first.layers[0], reverbSend: undefined, effects: [] };
-  const withHall = {
-    ...first.layers[0],
-    id: 'with-hall',
-    reverbSend: undefined,
-    effects: [
-      { id: 'fx', bypass: false, plugin: { componentId: 'aufx:rvb2:appl', name: 'Hall', manufacturer: 'Apple' } },
-    ],
-  };
-  const pad = {
-    ...first.layers[0],
-    id: 'pad',
-    reverbSend: undefined,
-    effects: [],
-    pad: { mode: 'follow', chord: { root: 0, quality: 'maj' }, base: 48, playing: true },
-  };
+  const withSend = { ...first.layers[0], reverbSend: 0.35 };
+  const { masterEffects: _none, ...oldConcert } = concert;
   const old = {
-    concert: { ...concert, sets: [{ ...concert.sets[0], patches: [{ ...first, layers: [plain, withHall, pad] }] }] },
+    concert: { ...oldConcert, sets: [{ ...concert.sets[0], patches: [{ ...first, layers: [withSend] }] }] },
+    settings: { ambience: 'hall', glue: false },
   };
-  const migrated = migrate(old, 4) as { concert: typeof concert; settings: { ambience: string; glue: boolean } };
-  const layers = migrated.concert.sets[0].patches[0].layers;
-  expect(layers.map((l) => l.reverbSend)).toEqual([0.2, 0, 0.35]);
-  expect(migrated.settings.ambience).toBe('hall');
-  expect(migrated.settings.glue).toBe(true);
+  const migrated = migrate(old, 5) as { concert: typeof concert; settings: Record<string, unknown> };
+  expect(migrated.concert.sets[0].patches[0].layers[0]).toEqual(first.layers[0]);
+  expect(migrated.concert.masterEffects).toEqual([]);
+  expect(migrated.settings.ambience).toBeUndefined();
+  expect(migrated.settings.glue).toBe(false);
+  expect(migrated.settings.limiter).toBe(true);
+});
+
+test('reorders sets and patches while preserving the current patch and its configuration', () => {
+  const store = useConcert.getState();
+  const original = selectCurrentPatch(store)!;
+  store.movePatch(original.id, 1);
+  expect(useConcert.getState().concert.sets[0].patches[1]).toEqual(original);
+  expect(useConcert.getState().currentPatchId).toBe(original.id);
+  store.stepPatch(1);
+  expect(selectCurrentPatch(useConcert.getState())!.name).toBe('Basse / EP');
+  store.addSet('Encore');
+  const encore = useConcert.getState().concert.sets[1];
+  store.moveSet(encore.id, -1);
+  expect(useConcert.getState().concert.sets[0].id).toBe(encore.id);
+  store.moveSet(encore.id, -1);
+  store.movePatch('missing', 1);
+  expect(useConcert.getState().concert.sets[0].id).toBe(encore.id);
+});
+
+test('moves a patch between sets without cloning it and ignores invalid destinations', () => {
+  const store = useConcert.getState();
+  const patch = selectCurrentPatch(store)!;
+  store.addSet('Encore');
+  const destination = useConcert.getState().concert.sets[1].id;
+  store.movePatchToSet(patch.id, destination);
+  expect(useConcert.getState().concert.sets[0].patches.some((p) => p.id === patch.id)).toBe(false);
+  expect(useConcert.getState().concert.sets[1].patches).toEqual([patch]);
+  expect(selectCurrentPatch(useConcert.getState())).toEqual(patch);
+  const concert = useConcert.getState().concert;
+  store.movePatchToSet(patch.id, destination);
+  store.movePatchToSet(patch.id, 'missing');
+  store.movePatchToSet('missing', destination);
+  expect(useConcert.getState().concert).toBe(concert);
+});
+
+test('patch trim clamps invalid values and is preserved by duplication', () => {
+  const store = useConcert.getState();
+  const patch = selectCurrentPatch(store)!;
+  store.setPatchGainDb(patch.id, -100);
+  expect(selectCurrentPatch(useConcert.getState())!.gainDb).toBe(-24);
+  store.setPatchGainDb(patch.id, Number.NaN);
+  expect(selectCurrentPatch(useConcert.getState())!.gainDb).toBe(0);
+  store.setPatchGainDb(patch.id, 6);
+  expect(selectCurrentPatch(useConcert.getState())!.gainDb).toBe(0);
+  store.setPatchGainDb(patch.id, -6);
+  store.duplicatePatch(patch.id);
+  expect(selectCurrentPatch(useConcert.getState())!.gainDb).toBe(-6);
+});
+
+test('stage notes are limited in length and can be cleared', () => {
+  const store = useConcert.getState();
+  store.setPatchNotes(store.currentPatchId!, 'a'.repeat(500));
+  expect(selectCurrentPatch(useConcert.getState())!.notes).toHaveLength(400);
+  store.setPatchNotes(store.currentPatchId!, '');
+  expect(selectCurrentPatch(useConcert.getState())!.notes).toBe('');
 });

@@ -23,6 +23,15 @@ export function bankPath(bank: string): string {
   throw new Error(`Banque « ${BANK_LABELS[bank] ?? bank} » non installée : télécharge-la dans la bibliothèque de sons`);
 }
 
+export function isBankInstalled(bank: string) {
+  try {
+    bankPath(bank);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Bundled banks plus downloaded ones, as { name, path }. */
 function availableBanks() {
   const downloaded = LIBRARY.filter((b) => bankFile(b.id).exists).map((b) => ({

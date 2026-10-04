@@ -22,6 +22,7 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="patch/[id]" options={{ presentation: 'modal', title: 'Réglages du patch' }} />
         <Stack.Screen name="layer/[id]" options={{ presentation: 'modal', title: 'Layer' }} />
         <Stack.Screen name="sound/[layerId]" options={{ presentation: 'modal', title: 'Choisir un son' }} />
         <Stack.Screen name="effect/[layerId]" options={{ presentation: 'modal', title: 'Ajouter un effet' }} />
@@ -30,6 +31,7 @@ export default function RootLayout() {
         <Stack.Screen name="stage" options={{ presentation: 'fullScreenModal', headerShown: false }} />
         <Stack.Screen name="library" options={{ presentation: 'modal', title: 'Bibliothèque de sons' }} />
         <Stack.Screen name="performance" options={{ presentation: 'modal', title: 'Performance' }} />
+        <Stack.Screen name="check" options={{ presentation: 'modal', title: 'Vérifier le concert' }} />
         <Stack.Screen name="credits" options={{ presentation: 'modal', title: 'Crédits' }} />
       </Stack>
     </SafeAreaProvider>

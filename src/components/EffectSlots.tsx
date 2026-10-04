@@ -3,7 +3,7 @@ import { ActionSheetIOS, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { instrumentName } from '../model/defaults';
 import { instrumentIcon } from '../model/soundCategories';
-import type { EffectDef, LayerDef } from '../model/types';
+import { type EffectDef, type LayerDef, MASTER_ID } from '../model/types';
 import { useConcert } from '../store/concert';
 import { colors } from '../theme';
 import { Icon } from './Icon';
@@ -55,13 +55,14 @@ export function InstrumentSlot({ layer }: { layer: LayerDef }) {
  * `rows` is the same for every strip of the patch so faders line up.
  * Tap opens the plugin, the power icon toggles bypass, long-press for more.
  */
-export function EffectSlots({ layer, rows }: { layer: LayerDef; rows: number }) {
+/** `hostId`: the layer id, or MASTER_ID for the master bus. */
+export function EffectSlots({ hostId, effects, rows }: { hostId: string; effects: EffectDef[]; rows: number }) {
   const setEffectBypass = useConcert((s) => s.setEffectBypass);
   const removeEffect = useConcert((s) => s.removeEffect);
   const moveEffect = useConcert((s) => s.moveEffect);
 
   const open = (effect: EffectDef) =>
-    router.push({ pathname: '/plugin/[layerId]', params: { layerId: layer.id, slot: effect.id } });
+    router.push({ pathname: '/plugin/[layerId]', params: { layerId: hostId, slot: effect.id } });
 
   const menu = (effect: EffectDef) =>
     ActionSheetIOS.showActionSheetWithOptions(
@@ -77,24 +78,24 @@ export function EffectSlots({ layer, rows }: { layer: LayerDef; rows: number }) 
           'Annuler',
         ],
         disabledButtonIndices: [
-          ...(layer.effects[0]?.id === effect.id ? [2] : []),
-          ...(layer.effects[layer.effects.length - 1]?.id === effect.id ? [3] : []),
+          ...(effects[0]?.id === effect.id ? [2] : []),
+          ...(effects[effects.length - 1]?.id === effect.id ? [3] : []),
         ],
         destructiveButtonIndex: 4,
         cancelButtonIndex: 5,
       },
       (i) => {
         if (i === 0) open(effect);
-        if (i === 1) setEffectBypass(layer.id, effect.id, !effect.bypass);
-        if (i === 2) moveEffect(layer.id, effect.id, -1);
-        if (i === 3) moveEffect(layer.id, effect.id, 1);
-        if (i === 4) removeEffect(layer.id, effect.id);
+        if (i === 1) setEffectBypass(hostId, effect.id, !effect.bypass);
+        if (i === 2) moveEffect(hostId, effect.id, -1);
+        if (i === 3) moveEffect(hostId, effect.id, 1);
+        if (i === 4) removeEffect(hostId, effect.id);
       },
     );
 
   return (
     <View style={[styles.slots, { height: slotsHeight(rows) }]}>
-      {layer.effects.map((effect) => (
+      {effects.map((effect) => (
         <Pressable
           key={effect.id}
           onPress={() => open(effect)}
@@ -109,7 +110,7 @@ export function EffectSlots({ layer, rows }: { layer: LayerDef; rows: number }) 
           <Pressable
             hitSlop={8}
             accessibilityLabel={effect.bypass ? 'Activer l’effet' : 'Désactiver l’effet'}
-            onPress={() => setEffectBypass(layer.id, effect.id, !effect.bypass)}
+            onPress={() => setEffectBypass(hostId, effect.id, !effect.bypass)}
           >
             <Icon name="power" size={10} color={effect.bypass ? colors.textMuted : colors.success} weight="bold" />
           </Pressable>
@@ -119,8 +120,8 @@ export function EffectSlots({ layer, rows }: { layer: LayerDef; rows: number }) 
         </Pressable>
       ))}
       <Pressable
-        onPress={() => router.push({ pathname: '/effect/[layerId]', params: { layerId: layer.id } })}
-        accessibilityLabel="Ajouter un effet"
+        onPress={() => router.push({ pathname: '/effect/[layerId]', params: { layerId: hostId } })}
+        accessibilityLabel={hostId === MASTER_ID ? 'Ajouter un effet au master' : 'Ajouter un effet'}
         style={({ pressed }) => [styles.slot, styles.empty, pressed && styles.pressed]}
       >
         <Icon name="plus" size={10} color={colors.textMuted} />

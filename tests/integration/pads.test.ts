@@ -67,7 +67,7 @@ test('fixed chords use the configured register and transition time', () => {
     .getState()
     .updateLayer(padId, { pad: { ...pad, mode: 'fixed', chord: { root: 9, quality: 'min' }, base: 36, fade: 0.5 } });
   updatePads();
-  expect(AudioEngine.setLayerNotes).toHaveBeenCalledWith(padId, [33, 40, 45, 48], 90, 0.5);
+  expect(AudioEngine.setLayerNotes).toHaveBeenCalledWith(padId, [45, 52, 57, 60], 90, 0.5);
 });
 
 test('stopping and restarting pads updates their play state', () => {

@@ -1,7 +1,6 @@
 import { NativeModule, requireNativeModule } from 'expo';
 
 import type {
-  Ambience,
   AudioEngineModuleEvents,
   BluetoothMidiDevice,
   BundledSoundFont,
@@ -24,6 +23,10 @@ declare class AudioEngineModule extends NativeModule<AudioEngineModuleEvents> {
   stop(): void;
   getInfo(): EngineInfo;
   setMasterVolume(volume: number): void;
+  /** Tempo (BPM, 20…300) reported to Audio Units through the host musical context (4/4, no transport). */
+  setTempo(bpm: number): void;
+  setMidiVolumeControls(bindings: { cc: number; channel: number }[]): void;
+  setMidiVolumeLearn(enabled: boolean): void;
   panic(): void;
   /** Load figures since the previous call. */
   getPerformance(): PerformanceInfo;
@@ -32,8 +35,6 @@ declare class AudioEngineModule extends NativeModule<AudioEngineModuleEvents> {
   setGlueEnabled(enabled: boolean): void;
   /** High-pass on the built-in speakers only (they distort on deep bass). */
   setSpeakerProtection(enabled: boolean): void;
-  /** Room of the shared reverb every layer sends to. */
-  setAmbience(kind: Ambience): void;
   setVelocityCurve(curve: VelocityCurveKind): void;
   showBluetoothMidi(): Promise<void>;
   /** BLE MIDI keyboards currently connected to the device. */
@@ -64,6 +65,7 @@ declare class AudioEngineModule extends NativeModule<AudioEngineModuleEvents> {
   listPlugins(kind: PluginQuery): Promise<PluginInfo[]>;
   /** Replaces the layer instrument by an Audio Unit, restoring `state` (base64) if given. */
   loadPlugin(layerId: string, componentId: string, state: string | null): Promise<void>;
+  /** Effect and plugin APIs also take `"master"` as layer id: the master bus insert chain (before the limiter). */
   addEffect(
     layerId: string,
     effectId: string,

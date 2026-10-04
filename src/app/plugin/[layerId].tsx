@@ -7,16 +7,18 @@ import AudioEngine, { type PluginParameter, PluginEditorView } from '../../../mo
 import { Button } from '../../components/Button';
 import { PresetPicker } from '../../components/PresetPicker';
 import { capturePluginStates } from '../../engine/sync';
-import { selectLayer, useConcert } from '../../store/concert';
+import { MASTER_ID } from '../../model/types';
+import { selectEffectHost, useConcert } from '../../store/concert';
 import { colors } from '../../theme';
 
 /**
  * Shows an Audio Unit's own interface, or a generic parameter list when it has none.
- * Params: `layerId`, `slot` ("instrument" or an effect id). The plugin state is saved when leaving.
+ * Params: `layerId` (or "master" for the master bus), `slot` ("instrument" or an effect id).
+ * The plugin state is saved when leaving.
  */
 export default function PluginScreen() {
   const { layerId, slot = 'instrument' } = useLocalSearchParams<{ layerId: string; slot?: string }>();
-  const layer = useConcert(selectLayer(layerId));
+  const layer = useConcert(selectEffectHost(layerId));
   const [hasView, setHasView] = useState<boolean | null>(null);
 
   const effect = slot === 'instrument' ? undefined : layer?.effects.find((e) => e.id === slot);
@@ -24,14 +26,16 @@ export default function PluginScreen() {
   const setEffectBypass = useConcert((s) => s.setEffectBypass);
 
   // Persist whatever was tweaked, whichever way the screen is closed.
-  useEffect(() => () => void capturePluginStates(layerId, selectLayer(layerId)(useConcert.getState())), [layerId]);
+  useEffect(() => () => void capturePluginStates(layerId, selectEffectHost(layerId)(useConcert.getState())), [layerId]);
 
   return (
     <View style={styles.screen}>
       <Stack.Screen options={{ title: plugin ? `${plugin.name} · ${plugin.manufacturer}` : 'Plugin' }} />
       <View style={styles.toolbar}>
         <PresetPicker layerId={layerId} slot={slot} reloadKey={hasView} />
-        <Text style={styles.hint}>Les réglages sont sauvegardés dans le patch à la fermeture.</Text>
+        <Text style={styles.hint}>
+          Les réglages sont sauvegardés dans {layerId === MASTER_ID ? 'le concert' : 'le patch'} à la fermeture.
+        </Text>
         {effect && (
           <Button
             icon="power"

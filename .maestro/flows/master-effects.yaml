@@ -1,0 +1,25 @@
+appId: net.eliakim.livekeys
+name: Master insert effect loads in the engine
+---
+- runFlow: ../helpers/launch.yaml
+- assertNotVisible: 'Réverbe'
+- tapOn: 'Ajouter un effet au master'
+- tapOn: '.*Salle de concert.*'
+- assertVisible: '.*Salle de concert.*'
+# Regression: opening a master effect used to crash the app.
+- tapOn: '.*Salle de concert.*'
+- assertVisible: '.*sauvegardés dans le concert.*'
+- tapOn: 'Désactiver l’effet'
+- assertVisible: 'Activer l’effet'
+- tapOn: 'Activer l’effet'
+- tapOn: '.*Terminé'
+- assertVisible: 'Ajouter un effet au master'
+- tapOn: 'Réglages'
+- assertNotVisible: '.*Ambiance.*'
+- scrollUntilVisible:
+    element: 'Vérifier le concert…'
+    direction: DOWN
+- tapOn: 'Vérifier le concert…'
+- extendedWaitUntil:
+    visible: 'Aucun problème détecté'
+    timeout: 15000

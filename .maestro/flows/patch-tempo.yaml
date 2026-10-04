@@ -1,0 +1,15 @@
+appId: net.eliakim.livekeys
+name: Patch tempo is edited, tapped and shown on stage
+---
+- runFlow: ../helpers/launch.yaml
+- tapOn: 'Réglages du patch'
+- assertVisible: '120 BPM'
+- tapOn: 'Accélérer le tempo'
+- assertVisible: '121 BPM'
+- tapOn: 'Tap Tempo'
+- tapOn: 'Tap Tempo'
+- assertVisible: '[0-9]+ BPM'
+- tapOn: '.*Terminé'
+- tapOn: 'Mode scène'
+- assertVisible: 'Tap Tempo, .* BPM'
+- tapOn: '.*Quitter'

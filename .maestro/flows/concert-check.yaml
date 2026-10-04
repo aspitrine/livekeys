@@ -1,0 +1,20 @@
+appId: net.eliakim.livekeys
+name: Concert check lists resources and connections
+---
+- runFlow: ../helpers/launch.yaml
+- tapOn: 'Réglages'
+- scrollUntilVisible:
+    element: 'Vérifier le concert…'
+    direction: DOWN
+- tapOn: 'Vérifier le concert…'
+- extendedWaitUntil:
+    visible: 'Aucun problème détecté'
+    timeout: 15000
+- assertVisible: 'Ressources et patches'
+- assertVisible: 'Connexions'
+- assertVisible: '.*Moteur audio actif.*'
+- assertVisible: '.*ne garantit pas la stabilité.*'
+- tapOn: 'Relancer'
+- extendedWaitUntil:
+    visible: 'Aucun problème détecté'
+    timeout: 15000

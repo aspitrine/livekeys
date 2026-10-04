@@ -16,8 +16,6 @@ struct LayerConfig {
   var sustainEnabled = true
   /// false for chord pads: the layer ignores the keyboard and only plays notes sent with `setLayerNotes`.
   var keyboard = true
-  /// Send to the shared reverb, 0…1 (post-fader).
-  var reverbSend: Float = 0
 
   func accepts(note: UInt8, velocity: UInt8, channel: UInt8) -> Bool {
     guard keyboard else { return false }
@@ -43,7 +41,6 @@ struct LayerConfig {
     if let v = patch.midiChannel { midiChannel = min(max(v, -1), 15) }
     if let v = patch.sustainEnabled { sustainEnabled = v }
     if let v = patch.keyboard { keyboard = v }
-    if let v = patch.reverbSend { reverbSend = Float(min(max(v, 0), 1)) }
     if keyLow > keyHigh { swap(&keyLow, &keyHigh) }
     if velocityLow > velocityHigh { swap(&velocityLow, &velocityHigh) }
   }
@@ -65,7 +62,6 @@ struct LayerConfigRecord: Record {
   @Field var midiChannel: Int?
   @Field var sustainEnabled: Bool?
   @Field var keyboard: Bool?
-  @Field var reverbSend: Double?
 }
 
 struct EngineOptions: Record {

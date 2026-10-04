@@ -181,7 +181,13 @@ test('a layer still held by a key or the pedal is not unloaded when its tail tim
 test('mute and volume apply at once even while a neighbour bank is still loading', async () => {
   await sync();
   // A huge preloaded bank keeps the sync queue busy for seconds.
-  jest.mocked(AudioEngine.loadSoundFont).mockImplementationOnce(() => new Promise(() => {}));
+  let finish!: () => void;
+  jest.mocked(AudioEngine.loadSoundFont).mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
   const neighbour = useConcert.getState().concert.sets[0].patches[1];
   const pending = syncPatches(selectCurrentPatch(useConcert.getState()), [neighbour]);
   for (let i = 0; i < 8; i++) await Promise.resolve();
@@ -189,7 +195,8 @@ test('mute and volume apply at once even while a neighbour bank is still loading
   useConcert.getState().updateLayer(pianoId, { mute: true, volume: 0.3 });
   applyLiveSettings(selectCurrentPatch(useConcert.getState()));
   expect(AudioEngine.updateLayer).toHaveBeenCalledWith(pianoId, { mute: true, volume: 0.3 });
-  void pending;
+  finish();
+  await pending;
 });
 
 test('every built-in sound is level-corrected so no preset plays far louder than the others', () => {
@@ -199,4 +206,28 @@ test('every built-in sound is level-corrected so no preset plays far louder than
   expect(Math.max(...values)).toBeLessThanOrEqual(6);
   expect(Math.min(...values)).toBeGreaterThanOrEqual(-24);
   expect((levels as Record<string, number>)['GeneralUser-GS/0/0']).toBeLessThan(-6);
+});
+
+test('patch trim scales instruments and pads equally without rewriting their mix or reloading them', async () => {
+  await sync();
+  const store = useConcert.getState();
+  const before = selectCurrentPatch(store)!;
+  store.setPatchGainDb(patchId, -6);
+  jest.mocked(AudioEngine.loadSoundFont).mockClear();
+  applyLiveSettings(selectCurrentPatch(useConcert.getState()));
+  const gain = 10 ** (-6 / 20);
+  expect(AudioEngine.updateLayer).toHaveBeenCalledWith(pianoId, { volume: expect.closeTo(0.8 * gain, 8) });
+  expect(AudioEngine.updateLayer).toHaveBeenCalledWith(padId, { volume: expect.closeTo(0.01 * gain, 8) });
+  await sync();
+  expect(AudioEngine.loadSoundFont).not.toHaveBeenCalled();
+  expect(selectCurrentPatch(useConcert.getState())!.layers).toEqual(before.layers);
+  const neighbor = store.concert.sets[0].patches[1];
+  store.setPatchGainDb(neighbor.id, -12);
+  await syncPatches(selectCurrentPatch(useConcert.getState()), [
+    selectCurrentPatch({ ...useConcert.getState(), currentPatchId: neighbor.id })!,
+  ]);
+  expect(AudioEngine.addLayer).toHaveBeenCalledWith(
+    neighbor.layers[0].id,
+    expect.objectContaining({ volume: expect.closeTo(0.8 * 10 ** (-12 / 20), 8) }),
+  );
 });

@@ -30,6 +30,7 @@ export async function pickConcert(): Promise<Concert | null> {
   return {
     ...concert,
     mappings: concert.mappings ?? [],
+    masterEffects: concert.masterEffects ?? [],
     sets: concert.sets.map((s) => ({
       ...s,
       patches: s.patches.map((p) => ({ ...p, layers: p.layers.map((l) => ({ ...l, effects: l.effects ?? [] })) })),

@@ -1,6 +1,9 @@
+import { create } from 'zustand';
+
 import AudioEngine, { type LayerConfig } from '../../modules/audio-engine';
-import type { EffectDef, LayerDef, Patch, PluginRef } from '../model/types';
+import { type EffectDef, type LayerDef, MASTER_ID, type Patch, type PluginRef } from '../model/types';
 import { useConcert } from '../store/concert';
+import { patchLevelGain } from '../lib/patchLevel';
 import { bankPath, soundGainDb, soundKey } from './catalog';
 
 type Loaded = {
@@ -9,6 +12,19 @@ type Loaded = {
   instrument: string;
   effects: { id: string; bypass: boolean }[];
   hasPlugins: boolean;
+};
+
+/** Last load failure by layer id, cleared once the layer loads; shown by the concert check. */
+export const useLayerErrors = create<Record<string, string>>(() => ({}));
+
+const setLayerError = (id: string, error?: string) => {
+  if (useLayerErrors.getState()[id] === error) return;
+  useLayerErrors.setState((errors) => {
+    const next = { ...errors };
+    if (error) next[id] = error;
+    else delete next[id];
+    return next;
+  }, true);
 };
 
 /** What the native engine currently holds, by layer id. */
@@ -28,14 +44,13 @@ const CONFIG_KEYS: (keyof LayerConfig)[] = [
   'midiChannel',
   'sustainEnabled',
   'keyboard',
-  'reverbSend',
 ];
 
 /** Pads use a squared gain curve for finer control at low levels; keyboard layers keep linear gain. */
-const configOf = (layer: LayerDef) =>
+const configOf = (layer: LayerDef, gainDb?: number) =>
   ({
     ...Object.fromEntries(CONFIG_KEYS.map((k) => [k, layer[k]])),
-    volume: layer.pad ? Math.min(Math.max(layer.volume, 0), 1) ** 2 : layer.volume,
+    volume: (layer.pad ? Math.min(Math.max(layer.volume, 0), 1) ** 2 : layer.volume) * patchLevelGain(gainDb),
     keyboard: !layer.pad,
   }) as LayerConfig;
 
@@ -79,7 +94,7 @@ export function applyLiveSettings(patch: Patch | undefined) {
   for (const layer of patch?.layers ?? []) {
     const current = loaded.get(layer.id);
     if (!current) continue;
-    const config = configOf(layer);
+    const config = configOf(layer, patch?.gainDb);
     const changes = diff(current.config, config);
     if (!changes) continue;
     AudioEngine.updateLayer(layer.id, changes);
@@ -87,8 +102,30 @@ export function applyLiveSettings(patch: Patch | undefined) {
   }
 }
 
-/** Captures the live state of every plugin of a layer into the store (before unloading it). */
-export async function capturePluginStates(layerId: string, layer?: LayerDef) {
+/** Master bus inserts the native engine holds. */
+const master: Loaded['effects'] = [];
+
+/**
+ * Keeps the master bus insert chain in step with the concert, serialized with the layer loads.
+ * A failure is reported to the concert check; effects already installed stay in place.
+ */
+export function syncMasterEffects(effects: EffectDef[]) {
+  queue = queue
+    .then(async () => {
+      try {
+        await applyEffects(MASTER_ID, master, effects);
+        setLayerError(MASTER_ID);
+      } catch (e) {
+        console.warn('[engine sync] master effects', e);
+        setLayerError(MASTER_ID, e instanceof Error ? e.message : String(e));
+      }
+    })
+    .catch((e) => console.warn('[engine sync]', e));
+  return queue;
+}
+
+/** Captures the live state of every plugin of a layer (or the master bus) into the store, e.g. before unloading. */
+export async function capturePluginStates(layerId: string, layer?: Pick<LayerDef, 'effects' | 'plugin'>) {
   const { savePluginState } = useConcert.getState();
   const slots = [
     'instrument',
@@ -112,7 +149,7 @@ async function apply(active: Patch | undefined, preload: Patch[], request: numbe
 
   // 1. The current patch first, so it plays as soon as possible.
   for (const layer of active?.layers ?? []) {
-    await safeApplyLayer(layer);
+    await safeApplyLayer(layer, active?.gainDb);
     if (request !== revision) return;
   }
   AudioEngine.setActiveLayers(active?.layers.map((l) => l.id) ?? []);
@@ -151,21 +188,23 @@ async function apply(active: Patch | undefined, preload: Patch[], request: numbe
   // 3. Neighbours in the background.
   for (const patch of preload)
     for (const layer of patch.layers) {
-      await safeApplyLayer(layer);
+      await safeApplyLayer(layer, patch.gainDb);
       if (request !== revision) return;
     }
 }
 
-async function safeApplyLayer(layer: LayerDef) {
+async function safeApplyLayer(layer: LayerDef, gainDb?: number) {
   try {
-    await applyLayer(layer);
+    await applyLayer(layer, gainDb);
+    setLayerError(layer.id);
   } catch (e) {
     console.warn(`[engine sync] layer ${layer.name}`, e);
+    setLayerError(layer.id, e instanceof Error ? e.message : String(e));
   }
 }
 
-async function applyLayer(layer: LayerDef) {
-  const config = configOf(layer);
+async function applyLayer(layer: LayerDef, gainDb?: number) {
+  const config = configOf(layer, gainDb);
   let prev = loaded.get(layer.id);
 
   if (!prev) {

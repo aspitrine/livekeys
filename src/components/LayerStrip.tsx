@@ -1,19 +1,21 @@
-import Slider from '@react-native-community/slider';
 import { router } from 'expo-router';
 import { ActionSheetIOS, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { noteName } from '../lib/notes';
 import type { LayerDef } from '../model/types';
-import { useConcert } from '../store/concert';
+import { mixerLayers, selectCurrentPatch, useConcert } from '../store/concert';
 import { colors } from '../theme';
 import { Button } from './Button';
 import { EffectSlots, InstrumentSlot } from './EffectSlots';
 import { Fader } from './Fader';
-import { Icon } from './Icon';
+import { MidiPickupHint } from './MidiPickupHint';
 
 /** Mixer channel strip for one layer: name, sound, range, fader, mute/solo, insert effects. */
 /** `fxRows`: Audio FX rows to reserve, same for every strip of the patch. */
-export function LayerStrip({ layer, fxRows }: { layer: LayerDef; fxRows: number }) {
+/** `handle`: drag grip shown above the name while the strips are being reordered. */
+export function LayerStrip({ layer, fxRows, handle }: { layer: LayerDef; fxRows: number; handle?: React.ReactNode }) {
+  const patch = useConcert(selectCurrentPatch);
+  const index = mixerLayers(patch).findIndex((l) => l.id === layer.id);
   const updateLayer = useConcert((s) => s.updateLayer);
   const update = (patch: Partial<LayerDef>) => updateLayer(layer.id, patch);
   const edit = () => router.push({ pathname: '/layer/[id]', params: { id: layer.id } });
@@ -35,6 +37,7 @@ export function LayerStrip({ layer, fxRows }: { layer: LayerDef; fxRows: number 
   return (
     <View style={styles.strip}>
       <View style={[styles.colorBar, { backgroundColor: layer.color }]} />
+      {handle}
       <Pressable onPress={edit} onLongPress={menu} style={styles.head}>
         <Text style={styles.name} numberOfLines={1}>
           {layer.name}
@@ -46,23 +49,11 @@ export function LayerStrip({ layer, fxRows }: { layer: LayerDef; fxRows: number 
       </Pressable>
 
       <InstrumentSlot layer={layer} />
-      <EffectSlots layer={layer} rows={fxRows} />
-
-      {/* Send to the shared room (Réglages › Son › Ambiance), like an aux knob on a desk. */}
-      <View style={styles.send}>
-        <Icon name="building.columns" size={11} color={colors.textMuted} />
-        <Slider
-          style={styles.sendSlider}
-          value={layer.reverbSend ?? 0}
-          onValueChange={(reverbSend) => update({ reverbSend: Math.round(reverbSend * 100) / 100 })}
-          minimumTrackTintColor={layer.color}
-          maximumTrackTintColor={colors.control}
-          accessibilityLabel="Réverbe"
-        />
-      </View>
+      <EffectSlots hostId={layer.id} effects={layer.effects} rows={fxRows} />
 
       <Fader value={layer.volume} onChange={(volume) => update({ volume })} color={layer.color} />
       <Text style={styles.volume}>{Math.round(layer.volume * 100)}</Text>
+      <MidiPickupHint target={{ kind: 'layerVolume', index }} />
 
       <View style={styles.row}>
         <Button
@@ -87,6 +78,7 @@ export function LayerStrip({ layer, fxRows }: { layer: LayerDef; fxRows: number 
 
 const styles = StyleSheet.create({
   strip: {
+    flex: 1,
     width: 132,
     backgroundColor: colors.panel,
     borderRadius: 12,
@@ -100,8 +92,6 @@ const styles = StyleSheet.create({
   name: { color: colors.text, fontSize: 15, fontWeight: '600' },
   meta: { color: colors.textMuted, fontSize: 12 },
   volume: { color: colors.textDim, fontVariant: ['tabular-nums'] },
-  send: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'stretch', height: 24 },
-  sendSlider: { flex: 1, height: 24 },
   row: { flexDirection: 'row', gap: 6, alignSelf: 'stretch' },
   flex: { flex: 1 },
 });

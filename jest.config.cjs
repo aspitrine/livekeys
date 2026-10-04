@@ -3,7 +3,7 @@ const shared = {
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
-    '^(\\.\\./)+modules/audio-engine$': '<rootDir>/tests/mocks/audio-engine.ts',
+    '^(\\.\\./)+modules/audio-engine$': '<rootDir>/tests/mocks/audio-engine.tsx',
   },
 };
 
@@ -17,6 +17,10 @@ module.exports = {
   collectCoverageFrom: [
     'src/lib/chords.ts',
     'src/lib/notes.ts',
+    'src/lib/concertCheck.ts',
+    'src/lib/tempo.ts',
+    'src/lib/reorder.ts',
+    'src/engine/tempo.ts',
     'src/model/defaults.ts',
     'src/model/soundCategories.ts',
     'src/store/concert.ts',

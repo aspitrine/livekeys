@@ -43,3 +43,14 @@ struct ControllerState {
       + values.keys.sorted().map { [0xB0, $0, values[$0]!] }
   }
 }
+
+/// A CC owned by the host mixer must not also change the instrument's expression/volume.
+/// Sustain and emergency messages always keep their native meaning.
+struct MidiVolumeControl: Equatable {
+  let cc: Int
+  let channel: Int
+
+  func consumes(cc: UInt8, channel: UInt8) -> Bool {
+    ![64, 120, 123].contains(Int(cc)) && self.cc == Int(cc) && (self.channel == -1 || self.channel == Int(channel))
+  }
+}

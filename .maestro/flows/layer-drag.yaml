@@ -1,0 +1,19 @@
+appId: net.eliakim.livekeys
+name: Drag and drop reorders layers
+---
+- runFlow: ../helpers/launch.yaml
+- tapOn: 'Patch suivant'
+- tapOn: 'Patch suivant'
+- assertVisible: 'Ensuite : Orgue'
+- tapOn: 'Réorganiser les layers'
+- assertVisible: 'Déplacer le layer Finger Bass'
+# Finger Bass's handle (first strip) dropped after the second strip, portrait iPad 13".
+- swipe:
+    start: 32%, 11%
+    end: 51%, 11%
+    duration: 1500
+- assertVisible:
+    text: 'Déplacer le layer Finger Bass'
+    rightOf: 'Déplacer le layer Tine.*'
+- tapOn: 'Terminer la réorganisation des layers'
+- assertNotVisible: 'Déplacer le layer Finger Bass'

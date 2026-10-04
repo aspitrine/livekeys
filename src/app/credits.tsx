@@ -24,8 +24,9 @@ export default function CreditsScreen() {
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.intro}>LiveKeys utilise ces banques de sons libres. Merci à leurs auteurs.</Text>
-      {CREDITS.map((c) => (
-        <View key={c.name} style={styles.card}>
+      {/* The bundled light piano and its full downloadable version share a name. */}
+      {CREDITS.map((c, i) => (
+        <View key={`${i}-${c.name}`} style={styles.card}>
           <Text style={styles.name}>{c.name}</Text>
           <Text style={styles.text}>{c.author}</Text>
           <Text style={styles.text}>{c.license}</Text>

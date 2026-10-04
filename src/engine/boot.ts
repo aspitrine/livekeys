@@ -9,10 +9,11 @@ import AudioEngine, {
 } from '../../modules/audio-engine';
 import type { Patch } from '../model/types';
 import { selectCurrentPatch, selectNeighborPatches, useConcert } from '../store/concert';
-import { handleControlChange } from './controls';
+import { handleControlChange, hostOwnedControls } from './controls';
 import { onKeyboardNote, updatePads } from './pads';
 import { startPerformanceMonitor } from './performance';
-import { applyLiveSettings, syncPatches } from './sync';
+import { patchTempo } from './tempo';
+import { applyLiveSettings, syncMasterEffects, syncPatches } from './sync';
 
 type EngineStatus = {
   info: EngineInfo | null;
@@ -61,15 +62,21 @@ export async function bootEngine() {
   }
 
   let last: {
+    mappings: ReturnType<typeof useConcert.getState>['concert']['mappings'];
+    masterEffects: ReturnType<typeof useConcert.getState>['concert']['masterEffects'];
     active?: Patch;
     preload: Patch[];
     volume: number;
+    tempo: number;
     limiter: boolean;
     bluetooth: string;
     sound: string;
   } | null = null;
 
   const apply = (state: ReturnType<typeof useConcert.getState>) => {
+    if (state.concert.mappings !== last?.mappings)
+      AudioEngine.setMidiVolumeControls(hostOwnedControls(state.concert.mappings));
+    if (state.concert.masterEffects !== last?.masterEffects) syncMasterEffects(state.concert.masterEffects ?? []);
     const active = selectCurrentPatch(state);
     const preload = state.settings.preloadNeighbors ? selectNeighborPatches(state) : [];
     const patchesChanged =
@@ -84,20 +91,31 @@ export async function bootEngine() {
       // …then again once the queued sync has loaded whatever was missing.
       syncPatches(active, preload).then(updatePads);
     }
+    const tempo = patchTempo(active);
+    if (tempo !== last?.tempo) AudioEngine.setTempo(tempo);
     if (state.masterVolume !== last?.volume) AudioEngine.setMasterVolume(state.masterVolume);
     if (state.settings.limiter !== last?.limiter) AudioEngine.setLimiterEnabled(state.settings.limiter);
-    const { glue, speakerProtection, ambience, velocityCurve } = state.settings;
-    const sound = [glue, speakerProtection, ambience, velocityCurve].join('|');
+    const { glue, speakerProtection, velocityCurve } = state.settings;
+    const sound = [glue, speakerProtection, velocityCurve].join('|');
     if (sound !== last?.sound) {
       AudioEngine.setGlueEnabled(glue);
       AudioEngine.setSpeakerProtection(speakerProtection);
-      AudioEngine.setAmbience(ambience);
       AudioEngine.setVelocityCurve(velocityCurve);
     }
     const { bluetoothAutoReconnect, bluetoothDevices } = state.settings;
     const bluetooth = bluetoothAutoReconnect ? bluetoothDevices.map((d) => d.id).join(',') : '';
     if (bluetooth !== last?.bluetooth) AudioEngine.setBluetoothMidiDevices(bluetooth ? bluetooth.split(',') : []);
-    last = { active, preload, volume: state.masterVolume, limiter: state.settings.limiter, bluetooth, sound };
+    last = {
+      mappings: state.concert.mappings,
+      masterEffects: state.concert.masterEffects,
+      active,
+      preload,
+      volume: state.masterVolume,
+      tempo,
+      limiter: state.settings.limiter,
+      bluetooth,
+      sound,
+    };
   };
 
   // An interruption silenced the pads natively: play the chords the UI still shows as playing.

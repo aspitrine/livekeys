@@ -1,11 +1,24 @@
-import type { Ambience, VelocityCurveKind } from '../../modules/audio-engine';
+import type { VelocityCurveKind } from '../../modules/audio-engine';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { defaultConcert, defaultReverbSend, makeLayer, makePadLayer, makePatch } from '../model/defaults';
+import { defaultConcert, makeLayer, makePadLayer, makePatch } from '../model/defaults';
 import { SOUNDS } from '../model/sounds';
-import type { Concert, EffectDef, LayerDef, MidiMapping, Patch, PluginRef, SetList, SoundRef } from '../model/types';
+import {
+  type Concert,
+  type EffectDef,
+  type LayerDef,
+  MASTER_ID,
+  type MidiMapping,
+  type Patch,
+  type PluginRef,
+  type SetList,
+  type SoundRef,
+} from '../model/types';
 import { newId } from '../lib/id';
+import { clampPatchLevel } from '../lib/patchLevel';
+import { placeAt } from '../lib/reorder';
+import { clampTempo } from '../lib/tempo';
 import { debouncedStorage } from './storage';
 
 export type Settings = {
@@ -18,7 +31,6 @@ export type Settings = {
   /** High-pass on the iPad's own speakers (they distort on deep bass). */
   speakerProtection: boolean;
   /** Room of the shared reverb. */
-  ambience: Ambience;
   velocityCurve: VelocityCurveKind;
   /** Reconnect remembered Bluetooth MIDI keyboards automatically. */
   bluetoothAutoReconnect: boolean;
@@ -31,7 +43,6 @@ const DEFAULT_SETTINGS: Settings = {
   limiter: true,
   glue: true,
   speakerProtection: true,
-  ambience: 'hall',
   velocityCurve: 'normal',
   bluetoothAutoReconnect: true,
   bluetoothDevices: [],
@@ -49,6 +60,7 @@ type ConcertState = {
   renameConcert: (name: string) => void;
   addMapping: (mapping: Omit<MidiMapping, 'id'>) => void;
   removeMapping: (id: string) => void;
+  setMappingPickup: (id: string, pickup: boolean) => void;
 
   selectPatch: (id: string) => void;
   /** Moves through all patches of the concert, across sets. */
@@ -58,11 +70,21 @@ type ConcertState = {
   addSet: (name: string) => void;
   renameSet: (id: string, name: string) => void;
   removeSet: (id: string) => void;
+  moveSet: (id: string, delta: number) => void;
+  /** Drag and drop: puts the set at `index` of the list without it. */
+  placeSet: (id: string, index: number) => void;
 
   addPatch: (setId: string, name: string) => void;
   renamePatch: (id: string, name: string) => void;
+  setPatchGainDb: (id: string, db: number) => void;
+  setPatchNotes: (id: string, notes: string) => void;
+  setPatchTempo: (id: string, bpm: number) => void;
   duplicatePatch: (id: string) => void;
   removePatch: (id: string) => void;
+  movePatch: (id: string, delta: number) => void;
+  movePatchToSet: (id: string, setId: string) => void;
+  /** Drag and drop: puts the patch at `index` of the target set's patches (without it), in any set. */
+  placePatch: (id: string, setId: string, index: number) => void;
 
   addLayer: (patchId: string, sound?: SoundRef) => string;
   /** Adds the patch's chord pad (at most one per patch; returns the existing one). */
@@ -70,12 +92,15 @@ type ConcertState = {
   updateLayer: (layerId: string, patch: Partial<Omit<LayerDef, 'id'>>) => void;
   removeLayer: (layerId: string) => void;
 
+  /** Effect actions take a layer id, or MASTER_ID for the master bus. */
   addEffect: (layerId: string, plugin: PluginRef) => void;
   removeEffect: (layerId: string, effectId: string) => void;
   /** Moves an effect earlier (-1) or later (+1) in the layer's signal chain. */
   moveEffect: (layerId: string, effectId: string, delta: number) => void;
-  /** Moves a layer left (-1) or right (+1) in its patch. */
+  /** Moves a layer left (-1) or right (+1) among the mixer strips; pads have no position. */
   moveLayer: (layerId: string, delta: number) => void;
+  /** Drag and drop among the mixer strips (pads excluded): `index` in the strips without this layer. */
+  placeLayer: (layerId: string, index: number) => void;
   setEffectBypass: (layerId: string, effectId: string, bypass: boolean) => void;
   /** Stores a plugin state captured from the engine. `slot`: "instrument" or an effect id. */
   savePluginState: (layerId: string, slot: string, state: string) => void;
@@ -90,6 +115,12 @@ const mapPatches = (c: Concert, fn: (p: Patch) => Patch): Concert =>
 
 const mapLayers = (c: Concert, fn: (l: LayerDef) => LayerDef): Concert =>
   mapPatches(c, (p) => ({ ...p, layers: p.layers.map(fn) }));
+
+/** Edits the effect chain of a layer, or of the master bus for MASTER_ID. */
+const mapEffects = (c: Concert, hostId: string, fn: (effects: EffectDef[]) => EffectDef[]): Concert =>
+  hostId === MASTER_ID
+    ? { ...c, masterEffects: fn(c.masterEffects ?? []) }
+    : mapLayers(c, (l) => (l.id === hostId ? { ...l, effects: fn(l.effects) } : l));
 
 /** Moves the item with `id` by `delta` positions (clamped). */
 function move<T extends { id: string }>(items: T[], id: string, delta: number): T[] {
@@ -136,6 +167,11 @@ export const useConcert = create<ConcertState>()(
       removeMapping: (id) =>
         set(({ concert }) => ({ concert: { ...concert, mappings: concert.mappings.filter((m) => m.id !== id) } })),
 
+      setMappingPickup: (id, pickup) =>
+        set(({ concert }) => ({
+          concert: { ...concert, mappings: concert.mappings.map((m) => (m.id === id ? { ...m, pickup } : m)) },
+        })),
+
       selectPatch: (id) => set({ currentPatchId: id }),
 
       stepPatch: (delta) => {
@@ -161,6 +197,40 @@ export const useConcert = create<ConcertState>()(
           return { concert: next, currentPatchId: ensureSelection(next, currentPatchId) };
         }),
 
+      moveSet: (id, delta) => set(({ concert }) => ({ concert: { ...concert, sets: move(concert.sets, id, delta) } })),
+
+      placeSet: (id, index) =>
+        set(({ concert }) => ({ concert: { ...concert, sets: placeAt(concert.sets, id, index) } })),
+
+      placePatch: (id, setId, index) =>
+        set(({ concert }) => {
+          const patch = concert.sets.flatMap((s) => s.patches).find((p) => p.id === id);
+          if (!patch || !concert.sets.some((s) => s.id === setId)) return {};
+          return {
+            concert: mapSets(concert, (s) =>
+              s.id === setId
+                ? { ...s, patches: placeAt([...s.patches.filter((p) => p.id !== id), patch], id, index) }
+                : { ...s, patches: s.patches.filter((p) => p.id !== id) },
+            ),
+          };
+        }),
+
+      movePatch: (id, delta) =>
+        set(({ concert }) => ({ concert: mapSets(concert, (s) => ({ ...s, patches: move(s.patches, id, delta) })) })),
+
+      movePatchToSet: (id, setId) =>
+        set(({ concert }) => {
+          const source = concert.sets.find((s) => s.patches.some((p) => p.id === id));
+          const patch = source?.patches.find((p) => p.id === id);
+          if (!patch || source?.id === setId || !concert.sets.some((s) => s.id === setId)) return {};
+          return {
+            concert: mapSets(concert, (s) => ({
+              ...s,
+              patches: s.id === setId ? [...s.patches, patch] : s.patches.filter((p) => p.id !== id),
+            })),
+          };
+        }),
+
       addPatch: (setId, name) => {
         const patch = makePatch(name, [{ sound: SOUNDS.grand }]);
         set(({ concert }) => ({
@@ -172,6 +242,21 @@ export const useConcert = create<ConcertState>()(
       renamePatch: (id, name) =>
         set(({ concert }) => ({ concert: mapPatches(concert, (p) => (p.id === id ? { ...p, name } : p)) })),
 
+      setPatchNotes: (id, notes) =>
+        set(({ concert }) => ({
+          concert: mapPatches(concert, (p) => (p.id === id ? { ...p, notes: notes.slice(0, 400) } : p)),
+        })),
+
+      setPatchTempo: (id, bpm) =>
+        set(({ concert }) => ({
+          concert: mapPatches(concert, (p) => (p.id === id ? { ...p, tempo: clampTempo(bpm) } : p)),
+        })),
+
+      setPatchGainDb: (id, db) =>
+        set(({ concert }) => ({
+          concert: mapPatches(concert, (p) => (p.id === id ? { ...p, gainDb: clampPatchLevel(db) } : p)),
+        })),
+
       duplicatePatch: (id) =>
         set(({ concert }) => {
           let copyId: string | null = null;
@@ -180,6 +265,7 @@ export const useConcert = create<ConcertState>()(
             if (index < 0) return s;
             const source = s.patches[index];
             const copy: Patch = {
+              ...source,
               id: newId(),
               name: `${source.name} (copie)`,
               layers: source.layers.map((l) => ({ ...l, id: newId() })),
@@ -233,49 +319,49 @@ export const useConcert = create<ConcertState>()(
 
       addEffect: (layerId, plugin) => {
         const effect: EffectDef = { id: newId(), plugin, bypass: false };
-        set(({ concert }) => ({
-          concert: mapLayers(concert, (l) => (l.id === layerId ? { ...l, effects: [...l.effects, effect] } : l)),
-        }));
+        set(({ concert }) => ({ concert: mapEffects(concert, layerId, (effects) => [...effects, effect]) }));
       },
 
       moveEffect: (layerId, effectId, delta) =>
-        set(({ concert }) => ({
-          concert: mapLayers(concert, (l) =>
-            l.id === layerId ? { ...l, effects: move(l.effects, effectId, delta) } : l,
-          ),
-        })),
+        set(({ concert }) => ({ concert: mapEffects(concert, layerId, (effects) => move(effects, effectId, delta)) })),
 
-      moveLayer: (layerId, delta) =>
+      moveLayer: (layerId, delta) => {
+        const patch = allPatches(get().concert).find((p) => p.layers.some((l) => l.id === layerId));
+        const index = mixerLayers(patch).findIndex((l) => l.id === layerId);
+        if (index >= 0) get().placeLayer(layerId, index + delta);
+      },
+
+      placeLayer: (layerId, index) =>
         set(({ concert }) => ({
-          concert: mapPatches(concert, (p) =>
-            p.layers.some((l) => l.id === layerId) ? { ...p, layers: move(p.layers, layerId, delta) } : p,
-          ),
+          concert: mapPatches(concert, (p) => {
+            if (!p.layers.some((l) => l.id === layerId && !l.pad)) return p;
+            // Pads are not strips: they keep their slots, keyboard layers fill the others in the new order.
+            const strips = placeAt(mixerLayers(p), layerId, index);
+            let next = 0;
+            return { ...p, layers: p.layers.map((l) => (l.pad ? l : strips[next++])) };
+          }),
         })),
 
       removeEffect: (layerId, effectId) =>
         set(({ concert }) => ({
-          concert: mapLayers(concert, (l) =>
-            l.id === layerId ? { ...l, effects: l.effects.filter((e) => e.id !== effectId) } : l,
-          ),
+          concert: mapEffects(concert, layerId, (effects) => effects.filter((e) => e.id !== effectId)),
         })),
 
       setEffectBypass: (layerId, effectId, bypass) =>
         set(({ concert }) => ({
-          concert: mapLayers(concert, (l) =>
-            l.id === layerId ? { ...l, effects: l.effects.map((e) => (e.id === effectId ? { ...e, bypass } : e)) } : l,
+          concert: mapEffects(concert, layerId, (effects) =>
+            effects.map((e) => (e.id === effectId ? { ...e, bypass } : e)),
           ),
         })),
 
       savePluginState: (layerId, slot, state) =>
         set(({ concert }) => ({
-          concert: mapLayers(concert, (l) => {
-            if (l.id !== layerId) return l;
-            if (slot === 'instrument') return l.plugin ? { ...l, plugin: { ...l.plugin, state } } : l;
-            return {
-              ...l,
-              effects: l.effects.map((e) => (e.id === slot ? { ...e, plugin: { ...e.plugin, state } } : e)),
-            };
-          }),
+          concert:
+            slot === 'instrument'
+              ? mapLayers(concert, (l) => (l.id === layerId && l.plugin ? { ...l, plugin: { ...l.plugin, state } } : l))
+              : mapEffects(concert, layerId, (effects) =>
+                  effects.map((e) => (e.id === slot ? { ...e, plugin: { ...e.plugin, state } } : e)),
+                ),
         })),
 
       removeLayer: (layerId) =>
@@ -285,16 +371,22 @@ export const useConcert = create<ConcertState>()(
     }),
     {
       name: 'livekeys-concert',
-      version: 5,
+      version: 6,
       migrate: (persisted, version) => {
         const state = persisted as { concert: Concert };
         // v1 layers had no effects list.
         if (version < 2) state.concert = mapLayers(state.concert, (l) => ({ ...l, effects: l.effects ?? [] }));
         // v2 concerts had no MIDI mappings.
         if (version < 3) state.concert = { ...state.concert, mappings: state.concert.mappings ?? [] };
-        // v5 added the shared reverb: give existing layers a sensible send.
-        if (version < 5)
-          state.concert = mapLayers(state.concert, (l) => ({ ...l, reverbSend: l.reverbSend ?? defaultReverbSend(l) }));
+        // v6 replaced the shared reverb and its per-layer sends by master insert effects.
+        if (version < 6) {
+          state.concert = mapLayers(
+            state.concert,
+            ({ reverbSend: _send, ...l }: LayerDef & { reverbSend?: number }) => l,
+          );
+          state.concert = { ...state.concert, masterEffects: state.concert.masterEffects ?? [] };
+          delete (state as { settings?: { ambience?: string } }).settings?.ambience;
+        }
         // v4 / v5 added settings: fill any missing setting with its default.
         const withSettings = state as { settings?: Partial<Settings> };
         withSettings.settings = { ...DEFAULT_SETTINGS, ...withSettings.settings };
@@ -313,6 +405,12 @@ export const useConcert = create<ConcertState>()(
 
 // MARK: - Selectors
 
+/**
+ * Keyboard layers in mixer order. The chord pad lives in the sidebar: it has no strip, no position, and is not
+ * counted by « Layer N » MIDI controls.
+ */
+export const mixerLayers = (patch: Patch | undefined): LayerDef[] => patch?.layers.filter((l) => !l.pad) ?? [];
+
 export const selectCurrentPatch = (s: ConcertState): Patch | undefined =>
   allPatches(s.concert).find((p) => p.id === s.currentPatchId);
 
@@ -328,6 +426,20 @@ export const selectLayer = (layerId: string) => (s: ConcertState) =>
   allPatches(s.concert)
     .flatMap((p) => p.layers)
     .find((l) => l.id === layerId);
+
+/**
+ * Effect chain shown by the plugin screens: a layer's, or the master bus for MASTER_ID.
+ * The master host object is cached: a selector returning a new object on every call would make
+ * `useConcert` re-render forever (crash when opening a master effect).
+ */
+export const selectEffectHost = (hostId: string) => (s: ConcertState) => {
+  if (hostId !== MASTER_ID) return selectLayer(hostId)(s);
+  const effects = s.concert.masterEffects ?? EMPTY_EFFECTS;
+  if (masterHost.effects !== effects) masterHost = { effects, plugin: undefined };
+  return masterHost;
+};
+const EMPTY_EFFECTS: EffectDef[] = [];
+let masterHost: { effects: EffectDef[]; plugin: undefined } = { effects: EMPTY_EFFECTS, plugin: undefined };
 
 /** Patch that owns a layer — used by the editor to know solo context. */
 export const selectPatchOfLayer = (layerId: string) => (s: ConcertState) =>

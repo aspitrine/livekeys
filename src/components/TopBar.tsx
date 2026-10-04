@@ -40,9 +40,16 @@ export function TopBar() {
           <Text style={styles.context} numberOfLines={1}>
             {current ? `${current.set.name} · ${index + 1}/${patches.length}` : 'Aucun patch'}
           </Text>
-          <Text style={styles.patchName} numberOfLines={1} adjustsFontSizeToFit>
-            {current?.patch.name ?? '—'}
-          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Réglages du patch"
+            disabled={!current}
+            onPress={() => current && router.push({ pathname: '/patch/[id]', params: { id: current.patch.id } })}
+          >
+            <Text style={styles.patchName} numberOfLines={1} adjustsFontSizeToFit>
+              {current?.patch.name ?? '—'}
+            </Text>
+          </Pressable>
           <Text style={styles.context} numberOfLines={1}>
             {next ? `Ensuite : ${next.name}` : 'Fin du concert'}
           </Text>
@@ -133,15 +140,16 @@ function AudioPill() {
     <Pressable
       onPress={() => router.push('/performance')}
       accessibilityLabel="Performance"
-      style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
+      style={({ pressed }) => [styles.pill, styles.audioPill, pressed && styles.pillPressed]}
     >
       <Icon name={error ? 'exclamationmark.triangle.fill' : 'cpu'} size={14} color={color} />
       <Text style={[styles.pillText, { color }]} numberOfLines={1}>
         {error ? 'Audio indisponible' : current ? `DSP ${Math.round(load)} %` : 'Démarrage…'}
         {overloads > 0 && !error ? `  ·  ${overloads} ⚠︎` : ''}
       </Text>
+      {/* Runs to the pill's right edge, rounded corner included. */}
       <View style={styles.meter}>
-        <LevelMeter />
+        <LevelMeter style={styles.meterTrack} />
       </View>
     </Pressable>
   );
@@ -176,6 +184,8 @@ const styles = StyleSheet.create({
   muted: { color: colors.textMuted },
   led: { width: 8, height: 8, borderRadius: 4 },
   ledActive: { transform: [{ scale: 1.3 }] },
-  meter: { flex: 1, minWidth: 40 },
+  audioPill: { paddingRight: 0, overflow: 'hidden' },
+  meter: { flex: 1, minWidth: 40, alignSelf: 'stretch' },
+  meterTrack: { height: '100%', borderRadius: 0 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });

@@ -3,9 +3,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Icon } from '../components/Icon';
+import { StageNotes } from '../components/StageNotes';
 import { usePadChord } from '../engine/pads';
 import { chordName } from '../lib/chords';
 import { panic } from '../engine/pads';
+import { patchTempo, tap } from '../engine/tempo';
 import { LevelMeter } from '../components/LevelMeter';
 import { selectCurrentPatch, useConcert } from '../store/concert';
 import { colors } from '../theme';
@@ -35,6 +37,16 @@ export default function StageScreen() {
         <View style={styles.meter}>
           <LevelMeter />
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Tap Tempo, ${patchTempo(patch)} BPM`}
+          onPress={() => tap()}
+          disabled={!patch}
+          style={({ pressed }) => [styles.topButton, pressed && styles.pressed]}
+        >
+          <Icon name="metronome.fill" size={16} />
+          <Text style={styles.topText}>{patchTempo(patch)} BPM</Text>
+        </Pressable>
         <Pressable onPress={panic} style={[styles.topButton, styles.panic]}>
           <Icon name="exclamationmark.octagon.fill" size={16} />
           <Text style={styles.topText}>PANIC</Text>
@@ -55,6 +67,7 @@ export default function StageScreen() {
             .map((l) => l.name)
             .join('  ·  ')}
         </Text>
+        <StageNotes notes={patch?.notes} />
         {pad?.pad?.playing && (
           <View style={styles.padPill}>
             <Icon name="waveform" size={18} color={pad.color} />

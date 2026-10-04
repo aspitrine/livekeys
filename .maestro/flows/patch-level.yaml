@@ -1,0 +1,18 @@
+appId: net.eliakim.livekeys
+name: Balance patch level and restore it
+---
+- runFlow: ../helpers/launch.yaml
+- tapOn: 'Réglages du patch'
+- assertVisible: '0 dB'
+- tapOn: 'Baisser le niveau du patch'
+- assertVisible: '-1 dB'
+- tapOn: '.*Terminé'
+- tapOn: 'Patch suivant'
+- tapOn: 'Réglages du patch'
+- assertVisible: '0 dB'
+- tapOn: '.*Terminé'
+- tapOn: 'Patch précédent'
+- tapOn: 'Réglages du patch'
+- assertVisible: '-1 dB'
+- tapOn: 'Réinitialiser'
+- assertVisible: '0 dB'

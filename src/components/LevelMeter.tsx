@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import AudioEngine from '../../modules/audio-engine';
 import { colors } from '../theme';
@@ -11,7 +11,7 @@ const CEILING = 0.891;
 export const reductionColor = (db: number) => (db > 6 ? colors.danger : db > 1 ? colors.warning : colors.success);
 
 /** Real output peak (after limiter), ~30 Hz. Coloured by how hard the limiter works. */
-export function LevelMeter() {
+export function LevelMeter({ style }: { style?: StyleProp<ViewStyle> }) {
   const [level, setLevel] = useState({ peak: 0, reductionDb: 0 });
   useEffect(() => {
     const sub = AudioEngine.addListener('onLevel', (e) => setLevel(e));
@@ -20,7 +20,7 @@ export function LevelMeter() {
 
   const pct = Math.min(level.peak / CEILING, 1) * 100;
   return (
-    <View style={styles.track}>
+    <View style={[styles.track, style]}>
       <View style={[styles.fill, { width: `${pct}%`, backgroundColor: reductionColor(level.reductionDb) }]} />
     </View>
   );

@@ -48,6 +48,13 @@ public class AudioEngineModule: Module {
 
     Function("getInfo") { self.mixer.info() }
 
+    Function("setMidiVolumeLearn") { (enabled: Bool) in self.mixer.setMidiVolumeLearn(enabled) }
+    Function("setMidiVolumeControls") { (bindings: [MidiVolumeControlRecord]) in
+      self.mixer.setMidiVolumeControls(bindings.map { MidiVolumeControl(cc: $0.cc, channel: $0.channel) })
+    }
+
+    Function("setTempo") { (bpm: Double) in self.mixer.setTempo(bpm) }
+
     Function("setMasterVolume") { (volume: Double) in self.mixer.masterVolume = Float(volume) }
 
     Function("panic") { self.mixer.panic() }
@@ -57,10 +64,9 @@ public class AudioEngineModule: Module {
 
     Function("setLimiterEnabled") { (enabled: Bool) in self.mixer.limiterEnabled = enabled }
 
-    /// Master sound: bus compression, built-in speaker protection, shared reverb room, velocity curve.
+    /// Master sound: bus compression, built-in speaker protection, velocity curve.
     Function("setGlueEnabled") { (enabled: Bool) in self.mixer.glueEnabled = enabled }
     Function("setSpeakerProtection") { (enabled: Bool) in self.mixer.speakerProtectionEnabled = enabled }
-    Function("setAmbience") { (kind: String) in self.mixer.setAmbience(kind) }
     Function("setVelocityCurve") { (curve: String) in self.mixer.velocityCurve = VelocityCurve(rawValue: curve) ?? .normal }
 
     /// Presents the system Bluetooth MIDI pairing screen.
@@ -204,3 +210,9 @@ public class AudioEngineModule: Module {
 }
 
 private func midi7(_ v: Int) -> UInt8 { UInt8(min(max(v, 0), 127)) }
+
+
+struct MidiVolumeControlRecord: Record {
+  @Field var cc: Int = -1
+  @Field var channel: Int = -1
+}

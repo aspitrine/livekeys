@@ -51,10 +51,10 @@ sur l’App Store.
 | **Zones de clavier** | Plages de notes et de vélocité, transposition et canal MIDI pour chaque son.                                     |
 | **Pad d’accords**    | Une nappe qui suit les accords joués ou tient un accord fixe, avec registre et fondu entre les harmonies.        |
 | **Setlists**         | Préparation du concert, notes de scène et préchargement des patches voisins pour des transitions sans attente.   |
-| **AUv3**             | Hébergement d’instruments et d’effets Audio Unit v3 tiers, avec leur interface d’édition.                        |
-| **MIDI**             | Claviers USB et Bluetooth MIDI, reconnexion des appareils mémorisés, MIDI Learn (master, layers, patches, pads). |
+| **AUv3**             | Instruments et effets Audio Unit v3 tiers avec leur interface, tempo du patch transmis aux plugins synchronisés. |
+| **MIDI**             | Claviers USB et Bluetooth, MIDI Learn (volumes avec rattrapage, mute des layers, patches, pads, Tap Tempo).      |
 | **Sons intégrés**    | Piano droit et banque GeneralUser GS inclus, pianos et Rhodes supplémentaires téléchargeables.                   |
-| **Sécurité scène**   | Limiteur sur le bus master, réverbe commune, suivi de la charge DSP et bouton Panic.                             |
+| **Sécurité scène**   | Vérification du concert, limiteur sur le bus master, suivi de la charge DSP et bouton Panic.                     |
 
 ## Captures
 
@@ -106,6 +106,7 @@ classDiagram
   class Concert {
     sets: SetList[]
     mappings: MidiMapping[]
+    masterEffects: EffectDef[]
   }
   class SetList {
     name
@@ -113,7 +114,7 @@ classDiagram
   }
   class Patch {
     name
-    notes?
+    notes? · gainDb? · tempo?
     layers: LayerDef[]
   }
   class LayerDef {
@@ -121,7 +122,7 @@ classDiagram
     keyLow…keyHigh
     velocityLow…velocityHigh
     transpose · midiChannel
-    sustainEnabled · reverbSend
+    sustainEnabled
   }
   class SoundRef {
     bank · bankNumber · program
@@ -181,8 +182,8 @@ flowchart TD
 
 ### Graphe audio
 
-Chaque layer possède sa propre chaîne. Toutes convergent vers un bus master protégé, avec une réverbe partagée
-alimentée en départ post-fader, comme un départ auxiliaire sur une console.
+Chaque layer possède sa propre chaîne. Toutes convergent vers un bus master protégé, dont les effets en insert
+(réverbe commune, égaliseur…) sont partagés par tous les patches du concert.
 
 ```mermaid
 flowchart LR
@@ -201,10 +202,8 @@ flowchart LR
   PM --> FXP["Effets"] --> SP["Strip"]
   Strip --> Main["Main mixer"]
   SP --> Main
-  Strip -. "départ réverbe" .-> RB["Bus réverbe"]
-  SP -. "départ réverbe" .-> RB
-  RB --> Rev["Reverb2<br/>100 % wet"] --> Main
-  Main --> HP["Filtre passe-haut<br/>haut-parleurs intégrés"]
+  Main --> MFX["Effets master<br/>(AUv3, ordre et bypass)"]
+  MFX --> HP["Filtre passe-haut<br/>haut-parleurs intégrés"]
   HP --> Glue["Compresseur de bus<br/>DynamicsProcessor"]
   Glue --> Lim["Limiteur<br/>AUPeakLimiter"]
   Lim --> Ceil["Plafond −1 dBFS"]

@@ -1,0 +1,15 @@
+appId: net.eliakim.livekeys
+name: Patch notes remain visible on stage
+---
+- runFlow: ../helpers/launch.yaml
+- tapOn: 'Réglages du patch'
+- tapOn: 'Notes du patch.*'
+- inputText: 'Refrain : cordes'
+- hideKeyboard
+- tapOn: '.*Terminé'
+- tapOn: 'Mode scène'
+- assertVisible: 'Refrain : cordes'
+- tapOn: '.*Quitter'
+- tapOn: 'Patch suivant'
+- tapOn: 'Mode scène'
+- assertNotVisible: 'Refrain : cordes'

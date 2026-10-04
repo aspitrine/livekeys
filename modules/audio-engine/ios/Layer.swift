@@ -30,8 +30,6 @@ final class Layer {
   var instrument: AVAudioUnit = AVAudioUnitSampler()
   var effects: [EffectSlot] = []
   let strip = AVAudioMixerNode()
-  /// Input bus of this layer's send on the shared reverb.
-  var reverbBusIndex: AVAudioNodeBus?
   /// What the sampler plays. AVAudioUnitSampler falls back to its default sine sound whenever it is
   /// reconnected or the engine restarts, so the preset is reloaded after each of those.
   var samplerPreset: SamplerPreset?

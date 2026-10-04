@@ -1,0 +1,16 @@
+appId: net.eliakim.livekeys
+name: MIDI learn can be armed and cancelled
+---
+- runFlow: ../helpers/launch.yaml
+- tapOn: 'Réglages'
+- tapOn: 'Apprendre Volume master'
+- assertVisible: 'Annuler apprentissage Volume master'
+- tapOn: 'Annuler apprentissage Volume master'
+- assertVisible: 'Apprendre Volume master'
+- scrollUntilVisible:
+    element: 'Apprendre Layer 1 on / off'
+    direction: DOWN
+- tapOn: 'Apprendre Layer 1 on / off'
+- assertVisible: 'Annuler apprentissage Layer 1 on / off'
+- tapOn: 'Annuler apprentissage Layer 1 on / off'
+- assertVisible: 'Apprendre Layer 1 on / off'

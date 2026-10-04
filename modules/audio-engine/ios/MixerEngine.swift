@@ -34,6 +34,8 @@ final class MixerEngine {
   private var pedalInput = SustainState()
   /// Wheels / expression as last heard from the hardware (restored on layers that come back).
   private var controllerInput = ControllerState()
+  private var volumeControls: [MidiVolumeControl] = []
+  private var volumeLearn = false
   private var duplicates = NoteDeduplicator()
   /// Layers of the current patch: only they receive new notes and controllers.
   /// Other loaded layers are preloaded neighbours or a previous patch whose notes are still ringing.
@@ -80,6 +82,7 @@ final class MixerEngine {
       glue.removeTap(onBus: 0)
       ceiling.removeTap(onBus: 0)
       masterMeter.detach()
+      musicalContext.detach()
       engine.stop()
     }
     observers.forEach(NotificationCenter.default.removeObserver)
@@ -117,32 +120,21 @@ final class MixerEngine {
     componentFlags: 0,
     componentFlagsMask: 0
   ))
-  /// Shared room: every layer sends to it (post-fader), like an aux return on a mixing desk.
-  private let reverbBus = AVAudioMixerNode()
-  private let reverb = AVAudioUnitEffect(audioComponentDescription: AudioComponentDescription(
-    componentType: kAudioUnitType_Effect,
-    componentSubType: kAudioUnitSubType_Reverb2,
-    componentManufacturer: kAudioUnitManufacturer_Apple,
-    componentFlags: 0,
-    componentFlagsMask: 0
-  ))
   private var speakerProtection = true
 
-  /// Layers → mainMixer → speaker filter → glue → limiter → ceiling (−1 dBFS) → output, plus
-  /// layers → reverb bus → reverb (100 % wet) → mainMixer. Done once, before the engine starts.
+  /// Layers → mainMixer → master inserts → speaker filter → glue → limiter → ceiling (−1 dBFS) → output.
+  /// Done once, before the engine starts; the inserts are rewired by `wireMaster`.
   private func installLimiter() {
     guard limiter.engine == nil else { return }
     let mixer = engine.mainMixerNode
     let format = mixer.outputFormat(forBus: 0)
-    for node in [speakerFilter, glue, limiter, ceiling, reverbBus, reverb] as [AVAudioNode] { engine.attach(node) }
+    for node in [speakerFilter, glue, limiter, ceiling] as [AVAudioNode] { engine.attach(node) }
     engine.disconnectNodeOutput(mixer)
     engine.connect(mixer, to: speakerFilter, format: format)
     engine.connect(speakerFilter, to: glue, format: format)
     engine.connect(glue, to: limiter, format: format)
     engine.connect(limiter, to: ceiling, format: format)
     engine.connect(ceiling, to: engine.outputNode, format: format)
-    engine.connect(reverbBus, to: reverb, format: format)
-    engine.connect(reverb, to: mixer, fromBus: 0, toBus: mixer.nextAvailableInputBus, format: format)
     ceiling.outputVolume = Self.ceilingGain
 
     let band = speakerFilter.bands[0]
@@ -158,9 +150,6 @@ final class MixerEngine {
     params?.parameter(withAddress: 4)?.value = 0.01  // attack s
     params?.parameter(withAddress: 5)?.value = 0.25  // release s
     params?.parameter(withAddress: 6)?.value = 7     // make-up gain dB
-
-    reverb.auAudioUnit.parameterTree?.parameter(withAddress: 0)?.value = 100  // return is fully wet
-    setAmbience("hall")
   }
 
   var glueEnabled: Bool {
@@ -179,27 +168,6 @@ final class MixerEngine {
   private func updateSpeakerFilter() {
     let builtIn = AVAudioSession.sharedInstance().currentRoute.outputs.contains { $0.portType == .builtInSpeaker }
     speakerFilter.bypass = !(speakerProtection && builtIn)
-  }
-
-  /// Room of the shared reverb: "off", "room", "chamber", "hall", "plate", "cathedral".
-  func setAmbience(_ kind: String) {
-    let preset: String? = switch kind {
-    case "room": "Medium Room"
-    case "chamber": "Medium Chamber"
-    case "hall": "Medium Hall"
-    case "plate": "Plate"
-    case "cathedral": "Cathedral"
-    default: nil
-    }
-    guard let preset, let factory = reverb.auAudioUnit.factoryPresets?.first(where: { $0.name == preset }) else {
-      reverbBus.outputVolume = 0
-      reverb.bypass = true  // saves CPU when unused
-      return
-    }
-    reverb.auAudioUnit.currentPreset = factory
-    reverb.auAudioUnit.parameterTree?.parameter(withAddress: 0)?.value = 100
-    reverb.bypass = false
-    reverbBus.outputVolume = 1
   }
 
   /// Velocity response to the player's touch.
@@ -340,14 +308,33 @@ final class MixerEngine {
     let layer = try self.layer(layerId)
     let unit = try await PluginHost.instantiate(componentId: componentId)
     if let state { PluginHost.restore(state, into: unit) }
+    MusicalContext.install(on: unit)
     try graph.sync { try withMutedLayer(layer) { try replaceInstrument(of: layer, with: unit) } }
   }
 
+  /// `layerId` = `masterId` inserts on the whole mix instead of a layer.
   func addEffect(layerId: String, effectId: String, componentId: String, state: String?, bypass: Bool) async throws {
-    let layer = try self.layer(layerId)
     let unit = try await PluginHost.instantiate(componentId: componentId)
     if let state { PluginHost.restore(state, into: unit) }
+    MusicalContext.install(on: unit)
     unit.auAudioUnit.shouldBypassEffect = bypass
+    if layerId == Self.masterId {
+      graph.sync {
+        withMutedMaster {
+          engine.attach(unit)
+          let replaced = lock.withLock { () -> [EffectSlot] in
+            let previous = masterEffects.filter { $0.id == effectId }
+            masterEffects.removeAll { $0.id == effectId }
+            masterEffects.append(EffectSlot(id: effectId, unit: unit))
+            return previous
+          }
+          wireMaster()
+          replaced.forEach { engine.detach($0.unit) }
+        }
+      }
+      return
+    }
+    let layer = try self.layer(layerId)
     try graph.sync {
       try withMutedLayer(layer) {
         engine.attach(unit)
@@ -365,6 +352,17 @@ final class MixerEngine {
   }
 
   func removeEffect(layerId: String, effectId: String) throws {
+    if layerId == Self.masterId {
+      graph.sync {
+        guard let slot = lock.withLock({ masterEffects.first { $0.id == effectId } }) else { return }
+        withMutedMaster {
+          lock.withLock { masterEffects.removeAll { $0.id == effectId } }
+          wireMaster()
+          engine.detach(slot.unit)
+        }
+      }
+      return
+    }
     let layer = try self.layer(layerId)
     try graph.sync {
       guard let slot = layer.effects.first(where: { $0.id == effectId }) else { return }
@@ -379,6 +377,18 @@ final class MixerEngine {
 
   /// Reorders the insert effects of a layer (ids in signal order; unknown ids are ignored).
   func setEffectOrder(layerId: String, ids: [String]) throws {
+    if layerId == Self.masterId {
+      graph.sync {
+        let current = lock.withLock { masterEffects }
+        let ordered = ids.compactMap { id in current.first { $0.id == id } }
+        guard ordered.count == current.count, ordered.map(\.id) != current.map(\.id) else { return }
+        withMutedMaster {
+          lock.withLock { masterEffects = ordered }
+          wireMaster()
+        }
+      }
+      return
+    }
     let layer = try self.layer(layerId)
     try graph.sync {
       let ordered = ids.compactMap { id in layer.effects.first { $0.id == id } }
@@ -398,6 +408,10 @@ final class MixerEngine {
   /// `slot` = "instrument" or an effect id.
   func unit(layerId: String, slot: String) throws -> AVAudioUnit {
     try lock.withLock {
+      if layerId == Self.masterId {
+        guard let unit = masterEffects.first(where: { $0.id == slot })?.unit else { throw PluginError.unknownSlot(slot) }
+        return unit
+      }
       guard let layer = layers[layerId] else { throw EngineError.unknownLayer(layerId) }
       guard let unit = layer.unit(slot: slot) else { throw PluginError.unknownSlot(slot) }
       return unit
@@ -407,6 +421,38 @@ final class MixerEngine {
   private func layer(_ id: String) throws -> Layer {
     guard let layer = lock.withLock({ layers[id] }) else { throw EngineError.unknownLayer(id) }
     return layer
+  }
+
+  // MARK: - Master inserts
+
+  /// Effect chain id JS uses for the master bus.
+  static let masterId = "master"
+  /// Insert effects on the whole mix, in signal order. Mutated on `graph`, under `lock`.
+  private var masterEffects: [EffectSlot] = []
+
+  /// mainMixer → inserts → speaker filter, at the mixer's format. Call on `graph`.
+  private func wireMaster() {
+    let mixer = engine.mainMixerNode
+    let format = mixer.outputFormat(forBus: 0)
+    let units = lock.withLock { masterEffects.map(\.unit) }
+    engine.disconnectNodeOutput(mixer)
+    units.forEach(engine.disconnectNodeOutput)
+    let nodes: [AVAudioNode] = [mixer] + units + [speakerFilter]
+    for (from, to) in zip(nodes, nodes.dropFirst()) { engine.connect(from, to: to, format: format) }
+  }
+
+  /// Rewiring the master while playing would click: ramp the output down (~50 ms), change, ramp back up.
+  /// Call on `graph`, never on the audio thread: it sleeps.
+  private func withMutedMaster(_ change: () -> Void) {
+    let ramp = { (from: Float, to: Float) in
+      for step in 1...10 {
+        self.ceiling.outputVolume = (from + (to - from) * Float(step) / 10) * Self.ceilingGain
+        Thread.sleep(forTimeInterval: 0.005)
+      }
+    }
+    ramp(1, 0)
+    change()
+    ramp(0, 1)
   }
 
   // MARK: - Graph (call on `graph` only)
@@ -553,16 +599,11 @@ final class MixerEngine {
     lock.withLock { layer.midiBlock = unit.auAudioUnit.scheduleMIDIEventBlock }
   }
 
-  /// Strip → main mix and → shared reverb (post-fader send; its level is set in applyMix).
+  /// Strip → main mix.
   private func connectStrip(_ layer: Layer) {
     let mixer = engine.mainMixerNode
-    let format = mixer.outputFormat(forBus: 0)
-    let reverbIndex = reverbBus.nextAvailableInputBus
-    engine.connect(layer.strip, to: [
-      AVAudioConnectionPoint(node: mixer, bus: mixer.nextAvailableInputBus),
-      AVAudioConnectionPoint(node: reverbBus, bus: reverbIndex),
-    ], fromBus: 0, format: format)
-    layer.reverbBusIndex = reverbIndex
+    engine.connect(layer.strip, to: mixer, fromBus: 0, toBus: mixer.nextAvailableInputBus,
+                   format: mixer.outputFormat(forBus: 0))
   }
 
   private func detach(_ layer: Layer) {
@@ -586,9 +627,6 @@ final class MixerEngine {
         let audible = isActive(layer.id) ? isAudible(layer, anySolo: anySolo) : !layer.config.mute
         layer.strip.outputVolume = audible && layer.audioReady ? layer.config.volume : 0
         layer.strip.pan = layer.config.pan
-        if let bus = layer.reverbBusIndex {
-          layer.strip.destination(forMixer: reverbBus, bus: bus)?.volume = layer.config.reverbSend
-        }
       }
     }
   }
@@ -660,6 +698,24 @@ final class MixerEngine {
     emit("noteOff", channel, Int(note), 0)
   }
 
+  func setMidiVolumeLearn(_ enabled: Bool) { lock.withLock { volumeLearn = enabled } }
+
+  func setMidiVolumeControls(_ controls: [MidiVolumeControl]) {
+    lock.withLock {
+      let fresh = controls.filter { !volumeControls.contains($0) }
+      volumeControls = controls
+      for binding in fresh {
+        guard (0...127).contains(binding.cc), let neutral = ControllerState.tracked[UInt8(binding.cc)] else { continue }
+        for channel in UInt8(0)...UInt8(15) where binding.channel == -1 || binding.channel == Int(channel) {
+          controllerInput.receive(channel: channel, status: 0xB0, data1: UInt8(binding.cc), data2: neutral)
+          for layer in layers.values where layer.config.listens(on: channel) && layer.audioReady {
+            layer.send(0xB0, UInt8(binding.cc), neutral)
+          }
+        }
+      }
+    }
+  }
+
   private func controlChange(_ cc: UInt8, value: UInt8, channel: UInt8) {
     switch cc {
     case 64:
@@ -676,8 +732,15 @@ final class MixerEngine {
     case 120, 123:
       panic()
     default:
-      lock.withLock { controllerInput.receive(channel: channel, status: 0xB0, data1: cc, data2: value) }
-      forEachListening(channel) { $0.send(0xB0, cc, value) }
+      lock.withLock {
+        if !volumeLearn && !volumeControls.contains(where: { $0.consumes(cc: cc, channel: channel) }) {
+          controllerInput.receive(channel: channel, status: 0xB0, data1: cc, data2: value)
+          for id in order {
+            guard let layer = layers[id], layer.audioReady, layer.config.listens(on: channel), isActive(id) else { continue }
+            layer.send(0xB0, cc, value)
+          }
+        }
+      }
     }
     emit("cc", channel, Int(cc), Int(value))
   }
@@ -784,11 +847,16 @@ final class MixerEngine {
   // MARK: - Performance
 
   private let masterMeter = RenderMeter()
+  private let musicalContext = MusicalContext()
+
+  /// Tempo of the current patch, reported to Audio Units that sync to the host.
+  func setTempo(_ bpm: Double) { musicalContext.setTempo(bpm) }
 
   /// Times the whole graph: the output unit pulls everything once per buffer.
   private func attachMasterMeter() {
     if let output = engine.outputNode.audioUnit {
       masterMeter.attach(output, sampleRate: AVAudioSession.sharedInstance().sampleRate)
+      musicalContext.attach(output, sampleRate: AVAudioSession.sharedInstance().sampleRate)
     }
   }
 

@@ -34,11 +34,7 @@ export type LayerConfig = {
   sustainEnabled: boolean;
   /** false for chord pads: ignore the keyboard, play only notes sent with setLayerNotes. Default true. */
   keyboard?: boolean;
-  /** Send to the shared reverb, 0…1 (post-fader). */
-  reverbSend: number;
 };
-
-export type Ambience = 'off' | 'room' | 'chamber' | 'hall' | 'plate' | 'cathedral';
 export type VelocityCurveKind = 'light' | 'normal' | 'heavy';
 
 export type BundledSoundFont = { name: string; path: string };

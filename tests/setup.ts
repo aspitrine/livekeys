@@ -1,5 +1,9 @@
 jest.mock('expo-sqlite/kv-store', () => require('./mocks/sqlite-storage'));
-jest.mock('expo-router', () => ({ router: { push: jest.fn(), back: jest.fn() } }));
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn(), back: jest.fn() },
+  useLocalSearchParams: jest.fn(() => ({})),
+  Stack: { Screen: () => null },
+}));
 
 beforeEach(() => {
   jest.clearAllMocks();

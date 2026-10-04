@@ -1,0 +1,26 @@
+appId: net.eliakim.livekeys
+name: Reorder patches and move between sets
+---
+- runFlow: ../helpers/launch.yaml
+- longPressOn: '[0-9]+, Piano [+] Pad'
+- tapOn: 'Monter le patch'
+- assertVisible: 'Ensuite : Basse / EP'
+- tapOn: 'Set'
+- eraseText
+- inputText: 'Encore'
+- tapOn: 'OK'
+- tapOn:
+    text: 'OK'
+    optional: true
+- assertNotVisible: 'Nouveau set'
+- assertVisible: '(?i)Encore.*'
+- longPressOn: '[0-9]+, Basse / EP'
+- tapOn: 'Déplacer dans un set'
+- tapOn: 'Encore'
+- assertVisible: 'Ensuite : Orgue'
+- longPressOn: '(?i)Encore.*'
+- tapOn: 'Monter le set'
+- tapOn: 'Patch précédent'
+- assertVisible: 'Ensuite : Piano'
+- tapOn: 'Patch précédent'
+- assertVisible: 'Ensuite : Piano [+] Pad'

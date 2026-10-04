@@ -1,22 +1,21 @@
 import { router } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
-import AudioEngine, { type Ambience, type VelocityCurveKind } from '../../modules/audio-engine';
+import AudioEngine, { type VelocityCurveKind } from '../../modules/audio-engine';
 import { Button } from '../components/Button';
-import { MAPPABLE_TARGETS, cancelLearn, sameTarget, startLearn, targetLabel, useMidiLearn } from '../engine/controls';
+import {
+  MAPPABLE_TARGETS,
+  cancelLearn,
+  sameTarget,
+  startLearn,
+  targetLabel,
+  useMidiLearn,
+  useMidiPickup,
+} from '../engine/controls';
 import { useEngineStatus } from '../engine/boot';
 import { exportConcert, pickConcert } from '../lib/concertFile';
 import { useConcert } from '../store/concert';
 import { colors } from '../theme';
-
-const AMBIENCES: { id: Ambience; label: string }[] = [
-  { id: 'off', label: 'Aucune' },
-  { id: 'room', label: 'Pièce' },
-  { id: 'chamber', label: 'Chambre' },
-  { id: 'hall', label: 'Salle' },
-  { id: 'plate', label: 'Plate' },
-  { id: 'cathedral', label: 'Cathédrale' },
-];
 
 const CURVES: { id: VelocityCurveKind; label: string }[] = [
   { id: 'light', label: 'Léger' },
@@ -27,8 +26,9 @@ const CURVES: { id: VelocityCurveKind; label: string }[] = [
 export default function SettingsScreen() {
   const concert = useConcert((s) => s.concert);
   const settings = useConcert((s) => s.settings);
-  const { setSetting, removeMapping, loadConcert, renameConcert } = useConcert.getState();
+  const { setSetting, removeMapping, setMappingPickup, loadConcert, renameConcert } = useConcert.getState();
   const learning = useMidiLearn((s) => s.learning);
+  const waiting = useMidiPickup((s) => s.waiting);
   const bluetooth = useEngineStatus((s) => s.bluetooth);
 
   const importConcert = async () => {
@@ -62,11 +62,28 @@ export default function SettingsScreen() {
               </Text>
               <Button
                 icon="dot.radiowaves.left.and.right"
+                accessibilityLabel={`${isLearning ? 'Annuler apprentissage' : 'Apprendre'} ${targetLabel(target)}`}
                 label={isLearning ? 'Bouge un contrôle…' : 'Apprendre'}
                 active={isLearning}
                 activeColor={colors.warning}
                 onPress={() => (isLearning ? cancelLearn() : startLearn(target))}
               />
+              {mapping && (target.kind === 'masterVolume' || target.kind === 'layerVolume') && (
+                <View>
+                  <Switch
+                    accessibilityLabel={`Rattrapage ${targetLabel(target)}`}
+                    value={mapping.pickup ?? false}
+                    onValueChange={(value) => setMappingPickup(mapping.id, value)}
+                  />
+                  <Text style={styles.hint}>
+                    {waiting[mapping.id] === 'up'
+                      ? '↑ Monter le fader'
+                      : waiting[mapping.id] === 'down'
+                        ? '↓ Baisser le fader'
+                        : 'Rattrapage'}
+                  </Text>
+                </View>
+              )}
               {mapping && (
                 <Button
                   icon="trash"
@@ -78,6 +95,10 @@ export default function SettingsScreen() {
             </View>
           );
         })}
+        <Text style={styles.hint}>
+          Rattrapage : le fader prend le contrôle lorsqu’il rejoint le volume enregistré, pour éviter un saut au premier
+          mouvement.
+        </Text>
       </Section>
 
       <Section title="Son">
@@ -93,20 +114,6 @@ export default function SettingsScreen() {
           value={settings.speakerProtection}
           onChange={(v) => setSetting('speakerProtection', v)}
         />
-        <View style={styles.row}>
-          <Text style={[styles.label, styles.flex]}>Ambiance (réverbe commune)</Text>
-        </View>
-        <View style={styles.chips}>
-          {AMBIENCES.map((a) => (
-            <Button
-              key={a.id}
-              label={a.label}
-              active={settings.ambience === a.id}
-              onPress={() => setSetting('ambience', a.id)}
-            />
-          ))}
-        </View>
-        <Text style={styles.hint}>Chaque layer y envoie plus ou moins de son avec son réglage « Réverbe ».</Text>
         <View style={styles.row}>
           <Text style={[styles.label, styles.flex]}>Toucher du clavier</Text>
         </View>
@@ -224,6 +231,13 @@ export default function SettingsScreen() {
             onPress={() => exportConcert(concert).catch(console.warn)}
           />
           <Button icon="square.and.arrow.down" label="Importer…" onPress={importConcert} />
+        </View>
+        <View style={styles.row}>
+          <View style={styles.flex}>
+            <Text style={styles.label}>Avant la scène</Text>
+            <Text style={styles.hint}>Sons et plugins manquants, clavier, sortie audio et erreurs de chargement.</Text>
+          </View>
+          <Button icon="checklist" label="Vérifier le concert…" onPress={() => router.push('/check')} />
         </View>
       </Section>
     </ScrollView>

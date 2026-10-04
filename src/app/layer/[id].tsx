@@ -13,7 +13,7 @@ import { BANK_LABELS } from '../../engine/catalog';
 import { instrumentName } from '../../model/defaults';
 import { noteName } from '../../lib/notes';
 import type { LayerDef } from '../../model/types';
-import { selectLayer, selectPatchOfLayer, useConcert } from '../../store/concert';
+import { mixerLayers, selectLayer, selectPatchOfLayer, useConcert } from '../../store/concert';
 import { colors } from '../../theme';
 
 type LearnTarget = 'keyLow' | 'keyHigh' | null;
@@ -44,7 +44,9 @@ export default function LayerEditor() {
   });
 
   if (!layer) return null;
-  const position = patch?.layers.findIndex((l) => l.id === id) ?? 0;
+  // Pads are not mixer strips: they have no position among the layers.
+  const strips = mixerLayers(patch);
+  const position = strips.findIndex((l) => l.id === id);
 
   function pick(note: number) {
     if (!learn || !layer) return;
@@ -76,25 +78,27 @@ export default function LayerEditor() {
       >
         <View style={styles.topActions}>
           <Button icon="trash" label="Supprimer le layer" variant="danger" onPress={confirmDelete} />
-          <View style={styles.moveGroup}>
-            <Button
-              icon="arrow.left"
-              variant="subtle"
-              accessibilityLabel="Déplacer à gauche"
-              disabled={position <= 0}
-              onPress={() => moveLayer(id, -1)}
-            />
-            <Text style={styles.position}>
-              Position {position + 1} / {patch?.layers.length ?? 1}
-            </Text>
-            <Button
-              icon="arrow.right"
-              variant="subtle"
-              accessibilityLabel="Déplacer à droite"
-              disabled={!patch || position >= patch.layers.length - 1}
-              onPress={() => moveLayer(id, 1)}
-            />
-          </View>
+          {!layer.pad && (
+            <View style={styles.moveGroup}>
+              <Button
+                icon="arrow.left"
+                variant="subtle"
+                accessibilityLabel="Déplacer à gauche"
+                disabled={position <= 0}
+                onPress={() => moveLayer(id, -1)}
+              />
+              <Text style={styles.position}>
+                Position {position + 1} / {strips.length}
+              </Text>
+              <Button
+                icon="arrow.right"
+                variant="subtle"
+                accessibilityLabel="Déplacer à droite"
+                disabled={position >= strips.length - 1}
+                onPress={() => moveLayer(id, 1)}
+              />
+            </View>
+          )}
           <Button icon="checkmark" label="Terminé" variant="primary" onPress={() => router.back()} />
         </View>
         <Section title="Nom">
@@ -110,7 +114,7 @@ export default function LayerEditor() {
 
         {layer.pad && (
           <Section title="Effets du pad">
-            <EffectSlots layer={layer} rows={layer.effects.length + 1} />
+            <EffectSlots hostId={layer.id} effects={layer.effects} rows={layer.effects.length + 1} />
             <Text style={styles.hint}>
               Tap pour régler, appui long pour réordonner ou retirer. « + » ajoute un effet.
             </Text>
@@ -237,19 +241,6 @@ export default function LayerEditor() {
         )}
 
         <Section title="Mix">
-          <View style={styles.row}>
-            <Text style={styles.label}>Réverbe</Text>
-            <Slider
-              style={styles.flex}
-              value={layer.reverbSend ?? 0}
-              onValueChange={(reverbSend) => update({ reverbSend: Math.round(reverbSend * 100) / 100 })}
-              minimumTrackTintColor={layer.color}
-            />
-            <Text style={styles.value}>{Math.round((layer.reverbSend ?? 0) * 100)} %</Text>
-          </View>
-          <Text style={styles.hint}>
-            Envoi vers l’ambiance commune (Réglages › Son). Évite d’y ajouter en plus une réverbe en effet.
-          </Text>
           <View style={styles.row}>
             <Text style={styles.label}>Pan</Text>
             <Slider
