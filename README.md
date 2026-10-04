@@ -71,23 +71,25 @@ LiveKeys sépare l’interface (TypeScript) du moteur audio temps réel (natif).
 ```mermaid
 flowchart TB
   subgraph JS["Expo / React Native (TypeScript)"]
-    UI["src/app/<br/>Écrans Expo Router<br/>scène · patch · layer · sons"]
+    UI["src/app/<br/>Écrans Expo Router<br/>scène · patch · layer · vérification"]
     Store["src/store/<br/>État du concert (zustand)<br/>persistance SQLite différée"]
-    Engine["src/engine/<br/>Synchronisation, pads,<br/>plugins, diagnostics"]
-    Lib["src/lib/<br/>Accords, notes, niveaux"]
+    Engine["src/engine/<br/>Synchronisation, pads, contrôles MIDI,<br/>tempo, plugins, diagnostics"]
+    Lib["src/lib/<br/>Accords, tempo, ordre,<br/>vérification du concert"]
   end
   subgraph Native["modules/audio-engine/ios (Swift / C++)"]
     Module["AudioEngineModule<br/>API du module Expo"]
     Mixer["MixerEngine<br/>graphe AVAudioEngine"]
     Midi["MidiInput · BluetoothMidi<br/>CoreMIDI USB / BLE"]
     Host["PluginHost<br/>instruments et effets AUv3"]
+    Clock["MusicalContext<br/>horloge sans verrou (C++)"]
   end
   UI <--> Store
   Store --> Engine
   Engine --> Lib
-  Engine -- "addLayer · updateLayer<br/>setActiveLayers · setLayerNotes" --> Module
+  Engine -- "addLayer · updateLayer · setActiveLayers<br/>addEffect (layer ou master) · setTempo" --> Module
   Module --> Mixer
   Mixer --> Host
+  Clock -- "tempo · temps · mesure" --> Host
   Midi -- "notes (thread MIDI)" --> Mixer
   Mixer -- "événements noteOn / CC / niveaux" --> Engine
 ```
@@ -144,6 +146,7 @@ classDiagram
   }
   Concert "1" *-- "*" SetList
   Concert "1" *-- "*" MidiMapping
+  Concert "1" *-- "*" EffectDef : effets master
   SetList "1" *-- "*" Patch
   Patch "1" *-- "*" LayerDef
   LayerDef --> SoundRef : instrument SoundFont
@@ -152,8 +155,9 @@ classDiagram
   LayerDef --> "0..1" PadConfig
 ```
 
-Les `MidiMapping` relient un contrôleur physique à une cible : volume master, volume du N-ième layer du patch courant,
-patch suivant/précédent, pad ou Panic.
+Les `MidiMapping` relient un contrôleur physique à une cible : volume master, volume ou on/off du N-ième layer du
+patch courant, patch suivant/précédent, pad, Tap Tempo ou Panic. Le pad d’accords n’a pas de position : « layer N »
+compte uniquement les layers de la table de mixage, dans l’ordre choisi par glisser-déposer.
 
 ### Routage d’une note MIDI vers les layers
 
@@ -180,10 +184,35 @@ flowchart TD
   Tr --> Play["Note envoyée à l’instrument<br/>et mémorisée pour le Note Off"]
 ```
 
+### Contrôles MIDI (CC)
+
+Les faders, boutons et pédales passent par le MIDI Learn. Les CC réservés au mixer (volumes, on/off des layers) sont
+retenus en natif pour ne pas modifier en même temps l’expression ou le volume des instruments.
+
+```mermaid
+flowchart TD
+  CC["Control Change<br/>clavier USB ou Bluetooth"] --> Owned{"CC appris pour un volume<br/>ou un on/off de layer ?"}
+  Owned -- non --> Inst["Transmis aux instruments<br/>du patch actif"]
+  Owned -- oui --> Keep["Retenu en natif"]
+  Inst --> JS
+  Keep --> JS["Événement vers le JS<br/>handleControlChange()"]
+  JS --> Learn{"MIDI Learn armé ?"}
+  Learn -- oui --> Map["Nouveau MidiMapping"]
+  Learn -- non --> Kind{"Type de cible"}
+  Kind -- "volume (fader)" --> Pickup{"Rattrapage actif et<br/>fader loin de la valeur ?"}
+  Pickup -- oui --> Hint["Ignoré, indication ↑ / ↓"]
+  Pickup -- non --> Vol["Volume master ou du layer N"]
+  Kind -- "bouton (front montant)" --> Btn["Layer N on/off · patch ±1<br/>pad · Tap Tempo · Panic"]
+```
+
+Le rattrapage se réarme à chaque changement de patch : un fader resté en bas ne coupe pas le patch suivant.
+
 ### Graphe audio
 
-Chaque layer possède sa propre chaîne. Toutes convergent vers un bus master protégé, dont les effets en insert
-(réverbe commune, égaliseur…) sont partagés par tous les patches du concert.
+Chaque layer possède sa propre chaîne. Le niveau du patch (−24…0 dB) s’applique sur chaque strip sans changer
+l’équilibre entre layers. Toutes les chaînes convergent vers un bus master protégé, dont les effets en insert
+(réverbe commune, égaliseur…) sont partagés par tous les patches du concert. Les AUv3 reçoivent le tempo du patch par
+le contexte musical de l’hôte.
 
 ```mermaid
 flowchart LR
@@ -191,7 +220,7 @@ flowchart LR
     direction LR
     Inst["Instrument<br/>AVAudioUnitSampler<br/>ou AUv3"]
     FX["Effets AUv3<br/>(ordre et bypass)"]
-    Strip["Strip<br/>volume · pan"]
+    Strip["Strip<br/>volume × niveau du patch · pan"]
     Inst --> FX --> Strip
   end
   subgraph Pad["Layer pad"]
@@ -208,6 +237,10 @@ flowchart LR
   Glue --> Lim["Limiteur<br/>AUPeakLimiter"]
   Lim --> Ceil["Plafond −1 dBFS"]
   Ceil --> Out(["Sortie"])
+  Clock["Horloge musicale<br/>tempo du patch, 4/4"] -.-> Inst
+  Clock -.-> FX
+  Clock -.-> MFX
+  Out -. "avance d’un buffer" .-> Clock
 ```
 
 Le callback audio ne prend aucun verrou et n’alloue rien : les mesures DSP passent par des compteurs atomiques lus
@@ -227,6 +260,8 @@ sequenceDiagram
   participant E as Moteur natif
   M->>S: Patch suivant (écran ou contrôleur MIDI)
   S->>Y: syncPatches(actif, voisins)
+  S->>E: setTempo(tempo du patch)
+  Note over S: Rattrapage des faders MIDI réarmé
   Y->>E: setActiveLayers(layers du patch actif)
   Note over E: Les nouvelles notes ne vont plus<br/>qu’aux layers actifs
   Y->>E: addLayer / updateLayer (seulement ce qui a changé)
