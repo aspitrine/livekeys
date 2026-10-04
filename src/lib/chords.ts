@@ -64,12 +64,13 @@ export function detectChord(heldNotes: Iterable<number>): Chord | null {
 }
 
 /**
- * Open, pad-friendly voicing around `base` (MIDI note of a C, e.g. 48 = C3):
+ * Open, pad-friendly voicing from `base` (MIDI note of a C, e.g. 48 = C3) upwards:
  * root, fifth, octave, then the third / colour notes an octave up (a "tenth" voicing, no muddy thirds low).
  */
 export function padVoicing(chord: Chord, base: number): number[] {
-  // Keep the root within a fifth of `base` so every key sits in the same register (B is played below C).
-  const root = base + (chord.root <= 6 ? chord.root : chord.root - 12);
+  // The root never goes below `base`: G or A chords voiced under C3 (98-117 Hz) fall in the speaker
+  // high-pass and below what iPad speakers reproduce, so they sounded much quieter than the others.
+  const root = base + chord.root;
   const intervals = quality(chord.quality).intervals;
   const notes = new Set<number>([root, root + 12]);
   if (intervals.includes(7)) notes.add(root + 7);

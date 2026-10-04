@@ -29,8 +29,16 @@ describe('chord detection and pad voicing', () => {
     expect(padVoicing({ root: 0, quality: 'maj' }, 48)).toEqual([48, 55, 60, 64]);
   });
 
-  test('keeps B in the same register as C', () => {
-    expect(padVoicing({ root: 11, quality: 'min' }, 48)).toEqual([47, 54, 59, 62]);
+  test('never voices a root below the register base', () => {
+    expect(padVoicing({ root: 11, quality: 'min' }, 48)).toEqual([59, 66, 71, 74]);
+  });
+
+  test('keeps G and A major as high as C major (regression: quiet pad on iPad speakers)', () => {
+    expect(padVoicing({ root: 7, quality: 'maj' }, 48)).toEqual([55, 62, 67, 71]);
+    expect(padVoicing({ root: 9, quality: 'maj' }, 48)).toEqual([57, 64, 69, 73]);
+    for (let root = 0; root < 12; root++) {
+      expect(Math.min(...padVoicing({ root, quality: 'maj' }, 48))).toBeGreaterThanOrEqual(48);
+    }
   });
 
   test('adds seventh and colour tones without duplicated notes', () => {
