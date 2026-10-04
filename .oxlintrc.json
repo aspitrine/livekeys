@@ -10,6 +10,6 @@
     "jest/no-focused-tests": "error",
     "jest/no-disabled-tests": "error"
   },
-  "ignorePatterns": ["ios/**", "android/**", "coverage/**", ".expo/**", "dist/**", "node_modules/**"],
+  "ignorePatterns": ["ios/**", "android/**", "coverage/**", ".expo/**", "dist/**", "node_modules/**", "website/**"],
   "overrides": [{ "files": ["tests/**"], "env": { "jest": true } }]
 }

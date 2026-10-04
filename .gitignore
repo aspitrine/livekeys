@@ -43,6 +43,13 @@ coverage/
 .build/
 .swiftpm/
 
+# Standalone Nuxt website
+website/.nuxt/
+website/.output/
+website/dist
+website/playwright-report/
+website/test-results/
+
 # generated native folders
 /ios
 /android
