@@ -11,6 +11,8 @@ import type { LayerDef } from '../../model/types';
 import { selectLayer, useConcert } from '../../store/concert';
 import { colors } from '../../theme';
 
+export { ScreenError as ErrorBoundary } from '../../components/ScreenError';
+
 type Tab = 'sounds' | 'plugins';
 
 /** Instrument browser: bundled SoundFont presets or AUv3 instruments. Picking loads immediately for audition. */

@@ -51,7 +51,12 @@ export function LayerStrip({ layer, fxRows, handle }: { layer: LayerDef; fxRows:
       <InstrumentSlot layer={layer} />
       <EffectSlots hostId={layer.id} effects={layer.effects} rows={fxRows} />
 
-      <Fader value={layer.volume} onChange={(volume) => update({ volume })} color={layer.color} />
+      <Fader
+        value={layer.volume}
+        onChange={(volume) => update({ volume })}
+        color={layer.color}
+        label={`Volume ${layer.name}`}
+      />
       <Text style={styles.volume}>{Math.round(layer.volume * 100)}</Text>
       <MidiPickupHint target={{ kind: 'layerVolume', index }} />
 

@@ -1,9 +1,16 @@
 /** Only the native boundary is replaced; store, MIDI controls and pad logic stay real in tests. */
-import { View } from 'react-native';
+import { type LayoutChangeEvent, View } from 'react-native';
 
-/** Native Audio Unit interface: a plain view that reports « no custom UI ». */
+/** Native Audio Unit interface: a plain view that reports « no custom UI » unless a test lays it out with one. */
 export function PluginEditorView({ onLoad }: { onLoad?: (e: { nativeEvent: { hasView: boolean } }) => void }) {
-  return <View testID="plugin-editor" onLayout={() => onLoad?.({ nativeEvent: { hasView: false } })} />;
+  return (
+    <View
+      testID="plugin-editor"
+      onLayout={(e: LayoutChangeEvent | undefined) =>
+        onLoad?.({ nativeEvent: { hasView: (e?.nativeEvent as { hasView?: boolean } | undefined)?.hasView ?? false } })
+      }
+    />
+  );
 }
 
 export default {
@@ -52,10 +59,14 @@ export default {
   getInfo: jest.fn(),
   getMidiSources: jest.fn(() => []),
   refreshMidi: jest.fn(),
+  showBluetoothMidi: jest.fn(async () => {}),
+  startMidi: jest.fn(async () => {}),
   listPlugins: jest.fn(() => Promise.resolve([])),
   getBundledSoundFonts: jest.fn(() => [
     { name: 'GeneralUser-GS', path: '/test/GeneralUser-GS.sf2' },
     { name: 'UprightPianoKW-small', path: '/test/UprightPianoKW-small.sf2' },
+    { name: 'UprightPianoKW-bright', path: '/test/UprightPianoKW-bright.sf2' },
+    { name: 'Wurlitzer-EP200', path: '/test/Wurlitzer-EP200.sf2' },
   ]),
   getSoundFontPresets: jest.fn(),
 };

@@ -6,6 +6,8 @@ import { cancelDownload, deleteBank, downloadBank, useLibrary } from '../engine/
 import { formatSize, LIBRARY, type LibraryBank } from '../model/library';
 import { colors } from '../theme';
 
+export { ScreenError as ErrorBoundary } from '../components/ScreenError';
+
 /** Downloadable reference sounds: heavy banks stay out of the app until the user wants them. */
 export default function LibraryScreen() {
   const status = useLibrary();
@@ -21,7 +23,7 @@ export default function LibraryScreen() {
         <View key={category} style={styles.section}>
           <Text style={styles.sectionTitle}>{category}</Text>
           {LIBRARY.filter((b) => b.category === category).map((bank) => (
-            <BankCard key={bank.id} bank={bank} status={status[bank.id]} />
+            <BankCard key={bank.id} bank={bank} status={status[bank.id] ?? { state: 'absent' }} />
           ))}
         </View>
       ))}
@@ -72,7 +74,8 @@ function BankCard({ bank, status }: { bank: LibraryBank; status: ReturnType<type
           icon="arrow.down.circle.fill"
           label={status.state === 'error' ? 'Réessayer' : 'Télécharger'}
           variant="primary"
-          onPress={() => downloadBank(bank)}
+          // Runs in the background (it reports through the library store); the button does not wait for it.
+          onPress={() => void downloadBank(bank)}
         />
       )}
     </View>

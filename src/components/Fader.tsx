@@ -9,12 +9,18 @@ type Props = {
   color?: string;
   /** Fixed height; omit to fill the parent (flex: 1). */
   height?: number;
+  /** Read by VoiceOver, e.g. « Volume Piano ». */
+  label: string;
 };
+
+/** VoiceOver swipe up / down step. */
+const ACCESSIBILITY_STEP = 0.05;
+const ACCESSIBILITY_ACTIONS = [{ name: 'increment' }, { name: 'decrement' }];
 
 const THUMB = 28;
 
 /** Vertical mixer fader, 0...1. Drag anywhere on the track; the value follows the finger relatively. */
-export function Fader({ value, onChange, color = colors.accent, height }: Props) {
+export function Fader({ value, onChange, color = colors.accent, height, label }: Props) {
   const [trackHeight, setTrackHeight] = useState(height ?? 220);
   const start = useRef(value);
   const latest = useRef({ value, onChange, trackHeight });
@@ -39,7 +45,19 @@ export function Fader({ value, onChange, color = colors.accent, height }: Props)
   const thumbTop = (1 - value) * (trackHeight - THUMB);
 
   return (
-    <View style={[styles.track, height ? { height } : styles.fill1]} onLayout={onLayout} {...responder.panHandlers}>
+    <View
+      style={[styles.track, height ? { height } : styles.fill1]}
+      onLayout={onLayout}
+      accessibilityRole="adjustable"
+      accessibilityLabel={label}
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(value * 100) }}
+      accessibilityActions={ACCESSIBILITY_ACTIONS}
+      onAccessibilityAction={(e) => {
+        const step = e.nativeEvent.actionName === 'increment' ? ACCESSIBILITY_STEP : -ACCESSIBILITY_STEP;
+        onChange(Math.round(Math.min(Math.max(value + step, 0), 1) * 100) / 100);
+      }}
+      {...responder.panHandlers}
+    >
       <View style={styles.rail} />
       <View style={[styles.fill, { top: thumbTop + THUMB / 2, backgroundColor: color }]} />
       <View style={[styles.thumb, { top: thumbTop }]} />

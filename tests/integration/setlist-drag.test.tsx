@@ -66,6 +66,10 @@ test('the reorder button shows drag handles and hides them again', async () => {
 
 test('patches are dragged within a set and into another set', async () => {
   const user = userEvent.setup();
+  // The drop positions below are laid out for the first five patches.
+  const concert = useConcert.getState().concert;
+  const [set] = concert.sets;
+  useConcert.getState().loadConcert({ ...concert, sets: [{ ...set!, patches: set!.patches.slice(0, 5) }] });
   useConcert.getState().addSet('Encore');
   await render(<SetlistSidebar />);
   await user.press(screen.getByRole('button', { name: 'Réorganiser les sets et patches' }));

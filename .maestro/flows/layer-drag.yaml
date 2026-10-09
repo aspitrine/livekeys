@@ -14,6 +14,6 @@ name: Drag and drop reorders layers
     duration: 1500
 - assertVisible:
     text: 'Déplacer le layer Finger Bass'
-    rightOf: 'Déplacer le layer Tine.*'
+    rightOf: 'Déplacer le layer Wurlitzer.*'
 - tapOn: 'Terminer la réorganisation des layers'
 - assertNotVisible: 'Déplacer le layer Finger Bass'

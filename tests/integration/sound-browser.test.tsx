@@ -26,7 +26,9 @@ const upright = bundledPresets('UprightPianoKW-small')[0];
 beforeEach(() => {
   invalidateCatalog();
   jest.mocked(AudioEngine.getSoundFontPresets).mockImplementation(async (path: string) => {
-    const sounds = path.includes('GeneralUser-GS') ? generalUser : [upright];
+    // Each bundled bank's real presets, read from its SF2 file.
+    const bank = path.split('/').pop()!.replace('.sf2', '');
+    const sounds = bank === 'GeneralUser-GS' ? generalUser : bundledPresets(bank);
     return sounds.map((sound) => ({ bank: sound.bankNumber, program: sound.program, name: sound.name }));
   });
 });

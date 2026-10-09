@@ -1,8 +1,9 @@
 {
   "extends": "expo/tsconfig.base",
-  "exclude": ["node_modules", "website"],
+  "exclude": ["node_modules", "website", "tests"],
   "compilerOptions": {
     "strict": true,
+    "noUncheckedIndexedAccess": true,
     "types": ["jest", "node", "react", "react-native"],
     "paths": {
       "@/*": ["./src/*"]

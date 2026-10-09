@@ -14,6 +14,10 @@ const hall = { componentId: 'aufx:rvb2:appl', name: 'AUReverb2', manufacturer: '
 const delay = { componentId: 'aufx:dely:appl', name: 'AUDelay', manufacturer: 'Apple' };
 const masterEffects = () => useConcert.getState().concert.masterEffects ?? [];
 
+/** Every layer effect of the concert: the master chain must never change them. */
+const layerEffects = () =>
+  useConcert.getState().concert.sets.flatMap((s) => s.patches.flatMap((p) => p.layers.map((l) => l.effects)));
+
 beforeEach(() => {
   resetConcert();
   useLayerErrors.setState({}, true);
@@ -21,6 +25,7 @@ beforeEach(() => {
 
 test('master inserts are edited with the same actions as layer effects and saved with the concert', () => {
   const store = useConcert.getState();
+  const before = layerEffects();
   store.addEffect(MASTER_ID, hall);
   store.addEffect(MASTER_ID, delay);
   const [reverb, echo] = masterEffects();
@@ -30,9 +35,7 @@ test('master inserts are edited with the same actions as layer effects and saved
   store.savePluginState(MASTER_ID, reverb.id, 'c3RhdGU=');
   expect(masterEffects()[1]).toMatchObject({ bypass: true, plugin: { state: 'c3RhdGU=' } });
   // The master chain belongs to the concert: no layer was touched.
-  expect(useConcert.getState().concert.sets[0].patches.every((p) => p.layers.every((l) => !l.effects.length))).toBe(
-    true,
-  );
+  expect(layerEffects()).toEqual(before);
   expect(selectEffectHost(MASTER_ID)(useConcert.getState())?.effects).toBe(masterEffects());
   store.removeEffect(MASTER_ID, echo.id);
   expect(masterEffects().map((e) => e.id)).toEqual([reverb.id]);
@@ -56,6 +59,9 @@ test('the engine receives master inserts in order and failures reach the concert
   store.addEffect(MASTER_ID, hall);
   await syncMasterEffects(masterEffects());
   expect(useLayerErrors.getState()[MASTER_ID]).toBe('AU absente');
+  // Only the master chain is checked here: drop the default concert's layer effects.
+  for (const p of useConcert.getState().concert.sets.flatMap((s) => s.patches))
+    for (const l of p.layers) useConcert.getState().updateLayer(l.id, { effects: [] });
   const issues = checkConcert(useConcert.getState().concert, {
     installedPlugins: new Set([delay.componentId]),
     isBankInstalled: () => true,

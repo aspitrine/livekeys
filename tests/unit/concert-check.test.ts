@@ -1,10 +1,11 @@
 import { checkConcert, type CheckEnvironment } from '../../src/lib/concertCheck';
 import { defaultConcert } from '../../src/model/defaults';
 import type { Concert } from '../../src/model/types';
+import { APPLE_EFFECTS } from '../fixtures';
 
 const plugin = (componentId: string, name: string) => ({ componentId, name, manufacturer: 'Acme' });
 const env = (overrides: Partial<CheckEnvironment> = {}): CheckEnvironment => ({
-  installedPlugins: new Set(['aumu:Syn1:Acme', 'aufx:Dly1:Acme']),
+  installedPlugins: new Set(['aumu:Syn1:Acme', 'aufx:Dly1:Acme', ...APPLE_EFFECTS.map((p) => p.id)]),
   isBankInstalled: (bank) => bank !== 'SplendidGrand',
   layerErrors: {},
   ...overrides,

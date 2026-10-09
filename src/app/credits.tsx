@@ -3,6 +3,8 @@ import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LIBRARY } from '../model/library';
 import { colors } from '../theme';
 
+export { ScreenError as ErrorBoundary } from '../components/ScreenError';
+
 const CREDITS = [
   {
     name: 'GeneralUser GS',
@@ -15,6 +17,18 @@ const CREDITS = [
     author: 'FreePats project (Gonzalo & Roberto)',
     license: 'CC0 1.0 — domaine public',
     url: 'https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html',
+  },
+  {
+    name: 'Upright Piano KW (brillant)',
+    author: 'FreePats project (Gonzalo & Roberto)',
+    license: 'CC0 1.0 — domaine public',
+    url: 'https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html',
+  },
+  {
+    name: 'Wurlitzer EP200',
+    author: 'Greg Sullivan, SFZ par kinwie (sfzinstruments)',
+    license: 'CC BY 3.0 — converti en SF2 pour LiveKeys',
+    url: 'https://github.com/sfzinstruments/GregSullivan.E-Pianos',
   },
   // Downloadable banks (bibliothèque de sons), converted to SF2 and hosted on github.com/aspitrine/livekeys-sounds.
   ...LIBRARY.map((b) => ({ name: b.name, author: b.author, license: b.license, url: b.source })),

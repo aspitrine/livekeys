@@ -3,13 +3,16 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import AudioEngine, { type PluginParameter, PluginEditorView } from '../../../modules/audio-engine';
+import { type PluginParameter, PluginEditorView } from '../../../modules/audio-engine';
 import { Button } from '../../components/Button';
 import { PresetPicker } from '../../components/PresetPicker';
+import { pluginParameters, setPluginParameter } from '../../engine/plugins';
 import { capturePluginStates } from '../../engine/sync';
 import { MASTER_ID } from '../../model/types';
 import { selectEffectHost, useConcert } from '../../store/concert';
 import { colors } from '../../theme';
+
+export { ScreenError as ErrorBoundary } from '../../components/ScreenError';
 
 /**
  * Shows an Audio Unit's own interface, or a generic parameter list when it has none.
@@ -77,14 +80,14 @@ function GenericParameters({ layerId, slot }: { layerId: string; slot: string })
   const [params, setParams] = useState<PluginParameter[]>([]);
   useEffect(() => {
     try {
-      setParams(AudioEngine.getPluginParameters(layerId, slot));
+      setParams(pluginParameters(layerId, slot));
     } catch (e) {
       console.warn(e);
     }
   }, [layerId, slot]);
 
   const set = (address: number, value: number) => {
-    AudioEngine.setPluginParameter(layerId, slot, address, value);
+    setPluginParameter(layerId, slot, address, value);
     setParams((ps) => ps.map((p) => (p.address === address ? { ...p, value } : p)));
   };
 
@@ -99,6 +102,7 @@ function GenericParameters({ layerId, slot }: { layerId: string; slot: string })
           </Text>
           <Slider
             style={styles.flex}
+            accessibilityLabel={p.name}
             value={p.value}
             minimumValue={p.min}
             maximumValue={p.max}

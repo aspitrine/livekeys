@@ -53,7 +53,7 @@ sur l’App Store.
 | **Setlists**         | Préparation du concert, notes de scène et préchargement des patches voisins pour des transitions sans attente.   |
 | **AUv3**             | Instruments et effets Audio Unit v3 tiers avec leur interface, tempo du patch transmis aux plugins synchronisés. |
 | **MIDI**             | Claviers USB et Bluetooth, MIDI Learn (volumes avec rattrapage, mute des layers, patches, pads, Tap Tempo).      |
-| **Sons intégrés**    | Piano droit et banque GeneralUser GS inclus, pianos et Rhodes supplémentaires téléchargeables.                   |
+| **Sons intégrés**    | Pianos droits, Wurlitzer et GeneralUser GS inclus ; 11 pianos à queue, droits et électriques téléchargeables.    |
 | **Sécurité scène**   | Vérification du concert, limiteur sur le bus master, suivi de la charge DSP et bouton Panic.                     |
 
 ## Captures
@@ -339,7 +339,7 @@ Le projet combine plusieurs niveaux de tests, chacun avec un périmètre explici
   lectures concurrentes des compteurs DSP, le tout sous Thread Sanitizer.
 - **E2E** (`.maestro/flows/`) : navigation, mode scène, pad et Panic sur simulateur iPad.
 
-Des seuils de couverture s’appliquent aux modules critiques. Les tests JavaScript ne valident ni le son réel ni la
+Des seuils de couverture s’appliquent à chaque couche de `src/`, écrans compris (environ 90 % des lignes). Les tests JavaScript ne valident ni le son réel ni la
 connectivité MIDI : ces changements demandent aussi un build natif et un essai sur iPad.
 
 Détails dans [`docs/TESTING.md`](docs/TESTING.md) et [`docs/AUDIO_DIAGNOSTICS.md`](docs/AUDIO_DIAGNOSTICS.md).
@@ -356,9 +356,16 @@ sur `main`.
 | ---------------- | -------------------- | --------------------------- |
 | GeneralUser GS   | S. Christian Collins | GeneralUser GS License v2.0 |
 | Upright Piano KW | FreePats project     | CC0 1.0 (domaine public)    |
+| Wurlitzer EP200  | Greg Sullivan        | CC BY 3.0                   |
 
 Les licences complètes sont fournies avec les banques dans `modules/audio-engine/ios/SoundFonts/` et rappelées dans
 l’écran Crédits de l’application.
+Les banques téléchargeables ont leurs propres licences, détaillées avec les modifications apportées lors de la conversion
+dans [livekeys-sounds](https://github.com/aspitrine/livekeys-sounds). Pour ajouter une banque : `scripts/samples2sfz.py`
+(échantillons bruts → SFZ), `scripts/sfz2sf2.py` (SFZ → SF2), `scripts/check-sf2.swift` (chargement et dynamique),
+`scripts/measure-levels.swift` (niveau → `src/model/soundLevels.json`). Une banque intégrée à l’app
+(`modules/audio-engine/ios/SoundFonts/`) n’est embarquée qu’après `npx pod-install` : CocoaPods fige la liste des
+ressources à l’installation des pods.
 
 ## Licence
 

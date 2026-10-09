@@ -2,7 +2,7 @@ import AudioEngine from '../../modules/audio-engine';
 import { applyLiveSettings, capturePluginStates, syncPatches } from '../../src/engine/sync';
 import { selectCurrentPatch, selectLayer, useConcert } from '../../src/store/concert';
 import levels from '../../src/model/soundLevels.json';
-import { resetConcert } from '../fixtures';
+import { clearEffects, resetConcert } from '../fixtures';
 
 let patchId: string;
 let pianoId: string;
@@ -103,6 +103,7 @@ test('a sound change reloads only that layer', async () => {
 
 test('loads, bypasses, reorders and removes effects through the native boundary', async () => {
   const store = useConcert.getState();
+  clearEffects(pianoId);
   const plugin = { componentId: 'aufx:rvb2:appl', name: 'Hall', manufacturer: 'Apple', params: { '0': 30 } };
   store.addEffect(pianoId, plugin);
   store.addEffect(pianoId, { ...plugin, componentId: 'aufx:dely:appl', name: 'Echo' });

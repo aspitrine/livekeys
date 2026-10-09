@@ -47,7 +47,12 @@ final class MidiInput {
     status = MIDIInputPortCreateWithProtocol(client, "Input" as CFString, ._1_0, &inputPort) { [weak self] list, _ in
       self?.parse(list)
     }
-    guard status == noErr else { throw MidiError.osStatus(status) }
+    guard status == noErr else {
+      // Without its port the client is useless: drop it so a retry starts from scratch (`client == 0`).
+      MIDIClientDispose(client)
+      client = 0
+      throw MidiError.osStatus(status)
+    }
 
     connectAllSources()
   }
@@ -132,11 +137,13 @@ final class MidiInput {
   }
 }
 
-enum MidiError: Error, CustomStringConvertible {
+/// `LocalizedError` so JS gets the OSStatus (« CoreMIDI error -10845 ») instead of « MidiError error 0 ».
+enum MidiError: LocalizedError, CustomStringConvertible {
   case osStatus(OSStatus)
   var description: String {
     switch self {
     case .osStatus(let s): return "CoreMIDI error \(s)"
     }
   }
+  var errorDescription: String? { description }
 }

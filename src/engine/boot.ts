@@ -9,6 +9,7 @@ import AudioEngine, {
 } from '../../modules/audio-engine';
 import type { Patch } from '../model/types';
 import { selectCurrentPatch, selectNeighborPatches, useConcert } from '../store/concert';
+import { flushWrites } from '../store/storage';
 import { handleControlChange, hostOwnedControls } from './controls';
 import { onKeyboardNote, updatePads } from './pads';
 import { startPerformanceMonitor } from './performance';
@@ -18,6 +19,8 @@ import { applyLiveSettings, syncMasterEffects, syncPatches } from './sync';
 type EngineStatus = {
   info: EngineInfo | null;
   error: string | null;
+  /** Audio runs but CoreMIDI is not set up yet (retried automatically): keyboards are not heard. */
+  midiError: string | null;
   sources: MidiSource[];
   lastEvent: MidiEvent | null;
   /** Live state of the remembered Bluetooth keyboards. */
@@ -27,6 +30,7 @@ type EngineStatus = {
 export const useEngineStatus = create<EngineStatus>(() => ({
   info: null,
   error: null,
+  midiError: null,
   sources: [],
   lastEvent: null,
   bluetooth: [],
@@ -38,6 +42,15 @@ let started = false;
 export async function bootEngine() {
   if (started) return;
   started = true;
+
+  // Registered before the engine starts: edits must be saved, and a failed start retried, even while audio is down.
+  AppState.addEventListener('change', (state) => {
+    if (state !== 'active') return flushWrites();
+    // Back in the app: retry at once what is still down; otherwise pick up keyboards plugged in the background.
+    if (wakeAudioRetry) wakeAudioRetry();
+    else if (useEngineStatus.getState().midiError) retryMidi(0, 0);
+    else if (useEngineStatus.getState().info) AudioEngine.refreshMidi();
+  });
 
   AudioEngine.addListener('onMidiSourcesChanged', ({ sources }) => {
     useEngineStatus.setState({ sources });
@@ -51,15 +64,9 @@ export async function bootEngine() {
     if (event.type === 'noteOn' || event.type === 'noteOff') onKeyboardNote(event.type, event.data1);
   });
 
-  try {
-    const info = await AudioEngine.start({ sampleRate: 48000, bufferFrames: 128 });
-    useEngineStatus.setState({ info, sources: AudioEngine.getMidiSources() });
-    AudioEngine.setMidiMonitorEnabled(true);
-    startPerformanceMonitor();
-  } catch (e) {
-    useEngineStatus.setState({ error: String(e) });
-    return;
-  }
+  await startAudio();
+  AudioEngine.setMidiMonitorEnabled(true);
+  startPerformanceMonitor();
 
   let last: {
     mappings: ReturnType<typeof useConcert.getState>['concert']['mappings'];
@@ -121,12 +128,79 @@ export async function bootEngine() {
   // An interruption silenced the pads natively: play the chords the UI still shows as playing.
   AudioEngine.addListener('onEngineRestarted', updatePads);
 
-  // Keyboards plugged or paired while the app was in the background.
-  AppState.addEventListener('change', (state) => state === 'active' && AudioEngine.refreshMidi());
-
   apply(useConcert.getState());
   useConcert.subscribe(apply);
 }
+
+/** Rescans MIDI inputs now (keyboards plugged while the app was open, concert check). Throws if the engine is down. */
+export function rescanMidi() {
+  AudioEngine.refreshMidi();
+  useEngineStatus.setState({ sources: AudioEngine.getMidiSources() });
+}
+
+/**
+ * Waits between retries of a failed audio or MIDI start: quick at first (the system audio and MIDI servers come
+ * back within a second or two), then every 10 s, for as long as it takes.
+ */
+export const RETRY_MS = [1000, 2000, 5000, 10_000];
+const retryDelay = (attempt: number) => RETRY_MS[Math.min(attempt, RETRY_MS.length - 1)]!;
+const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** Set while a failed audio start waits for its next try: calling it retries now. */
+let wakeAudioRetry: (() => void) | undefined;
+
+/**
+ * Starts the audio engine, retrying until it works. The audio session can be unavailable for a while (another app
+ * holds it, media services restarting): a single failed try must not leave the app silent until it is killed.
+ */
+async function startAudio() {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const { midiError, ...info } = await AudioEngine.start({ sampleRate: 48000, bufferFrames: 128 });
+      useEngineStatus.setState({
+        info,
+        error: null,
+        midiError: midiError ?? null,
+        sources: AudioEngine.getMidiSources(),
+      });
+      if (midiError) retryMidi();
+      return;
+    } catch (e) {
+      useEngineStatus.setState({ error: errorMessage(e) });
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, retryDelay(attempt));
+        wakeAudioRetry = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+      });
+      wakeAudioRetry = undefined;
+    }
+  }
+}
+
+let midiRetry: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * CoreMIDI was not ready when the engine started (e.g. its server was shutting down after a previous instance
+ * of the app exited). Audio already plays; retry MIDI until it works, so keyboards come back without a restart.
+ */
+function retryMidi(attempt = 0, delay = retryDelay(attempt)) {
+  clearTimeout(midiRetry);
+  midiRetry = setTimeout(async () => {
+    midiRetry = undefined;
+    try {
+      await AudioEngine.startMidi();
+      useEngineStatus.setState({ midiError: null, sources: AudioEngine.getMidiSources() });
+    } catch (e) {
+      useEngineStatus.setState({ midiError: errorMessage(e) });
+      retryMidi(attempt + 1);
+    }
+  }, delay);
+}
+
+/** System sheet to pair a Bluetooth MIDI keyboard. */
+export const showBluetoothMidi = () => AudioEngine.showBluetoothMidi();
 
 /** Any BLE MIDI keyboard connected (e.g. through the system picker) is remembered for auto-reconnect. */
 function rememberBluetoothKeyboards() {

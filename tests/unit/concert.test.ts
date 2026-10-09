@@ -1,4 +1,15 @@
-import { defaultConcert, instrumentName, makeLayer, makePadLayer } from '../../src/model/defaults';
+import fs from 'node:fs';
+import path from 'node:path';
+
+import {
+  defaultConcert,
+  instrumentName,
+  makeEffect,
+  makeLayer,
+  makePadLayer,
+  newPatch,
+} from '../../src/model/defaults';
+import { EFFECT_PRESETS } from '../../src/model/effectCategories';
 import { SOUNDS } from '../../src/model/sounds';
 import {
   selectCurrentPatch,
@@ -13,7 +24,7 @@ beforeEach(resetConcert);
 
 test('starts with a valid concert and a quiet chord pad', () => {
   const concert = defaultConcert();
-  expect(concert.sets[0].patches).toHaveLength(5);
+  expect(concert.sets[0].patches).toHaveLength(9);
   const pad = makePadLayer(1);
   expect(pad.volume).toBe(0.1);
   expect(pad.pad).toMatchObject({ mode: 'follow', playing: true });
@@ -197,4 +208,48 @@ test('stage notes are limited in length and can be cleared', () => {
   expect(selectCurrentPatch(useConcert.getState())!.notes).toHaveLength(400);
   store.setPatchNotes(store.currentPatchId!, '');
   expect(selectCurrentPatch(useConcert.getState())!.notes).toBe('');
+});
+
+// The default concert is what a new user plays first: it must sound right without downloading anything.
+const BUNDLED = fs
+  .readdirSync(path.join(__dirname, '../../modules/audio-engine/ios/SoundFonts'))
+  .filter((f) => f.endsWith('.sf2'))
+  .map((f) => f.replace('.sf2', ''));
+
+test('the default concert plays bundled sounds only, through Apple effects every iPad has', () => {
+  const layers = defaultConcert().sets.flatMap((s) => s.patches.flatMap((p) => p.layers));
+  for (const layer of layers) expect(BUNDLED).toContain(layer.sound.bank);
+  const presetPlugins = EFFECT_PRESETS.map((p) => p.plugin);
+  for (const effect of layers.flatMap((l) => l.effects)) {
+    expect(presetPlugins).toContainEqual(effect.plugin);
+    expect(effect.plugin.componentId).toMatch(/:appl$/);
+  }
+  // Every patch has some space around its sound, and layered sounds sit under the main one.
+  for (const patch of defaultConcert().sets[0]!.patches) {
+    expect(patch.layers.some((l) => l.effects.some((e) => e.plugin.componentId === 'aufx:rvb2:appl'))).toBe(true);
+    // The bass / EP split plays side by side: only layered patches put a sound under another.
+    const [main, ...under] = patch.layers.filter((l) => l.keyLow <= 48 && l.keyHigh >= 72);
+    expect(under.filter((l) => l.volume >= main!.volume)).toEqual([]);
+  }
+});
+
+test('effect and layer ids are unique, so each one can be edited on its own', () => {
+  const ids = defaultConcert().sets.flatMap((s) =>
+    s.patches.flatMap((p) => [p.id, ...p.layers.flatMap((l) => [l.id, ...l.effects.map((e) => e.id)])]),
+  );
+  expect(new Set(ids).size).toBe(ids.length);
+  expect(makeEffect('rv-hall').id).not.toBe(makeEffect('rv-hall').id);
+  expect(() => makeEffect('nope')).toThrow('Unknown effect preset');
+});
+
+test('a new patch starts on the sampled piano in a small room, ready to play', () => {
+  const patch = newPatch('Ballade');
+  expect(patch.layers).toHaveLength(1);
+  expect(patch.layers[0]).toMatchObject({ sound: SOUNDS.upright, effects: [{ plugin: { name: 'Chambre' } }] });
+  const store = useConcert.getState();
+  store.addPatch(store.concert.sets[0]!.id, 'Rappel');
+  expect(selectCurrentPatch(useConcert.getState())).toMatchObject({
+    name: 'Rappel',
+    layers: [{ sound: SOUNDS.upright }],
+  });
 });

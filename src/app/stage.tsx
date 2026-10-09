@@ -12,6 +12,8 @@ import { LevelMeter } from '../components/LevelMeter';
 import { selectCurrentPatch, useConcert } from '../store/concert';
 import { colors } from '../theme';
 
+export { ScreenError as ErrorBoundary } from '../components/ScreenError';
+
 /** Stage view: readable from a distance, nothing to mis-tap. Halves of the screen switch patches. */
 export default function StageScreen() {
   const concert = useConcert((s) => s.concert);

@@ -12,6 +12,8 @@ export type EngineInfo = {
   ioBufferMs: number;
   outputLatencyMs: number;
   outputRoute: string;
+  /** Set by `start` when audio runs but CoreMIDI could not be set up yet: retry with `startMidi`. */
+  midiError?: string;
 };
 
 export type LayerConfig = {

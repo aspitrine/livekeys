@@ -15,6 +15,32 @@
       "sha256": "d9f5157720963671906727ca2e12b3293fd822c831bb0de477dd1c5f3ad37108"
     },
     {
+      "id": "VCSL-UprightYamaha",
+      "name": "Upright Yamaha",
+      "category": "Piano droit",
+      "description": "Piano droit Yamaha au son chaleureux, 3 couches de vélocité (échantillonné tous les 6 demi-tons).",
+      "author": "Versilian Studios (VCSL)",
+      "license": "CC0 1.0",
+      "source": "https://github.com/sgossner/VCSL",
+      "file": "VCSL-UprightYamaha.sf2",
+      "url": "https://github.com/aspitrine/livekeys-sounds/releases/download/v1/VCSL-UprightYamaha.sf2",
+      "size": 62672220,
+      "sha256": "7a530af0934a8dd6b82b066bde3160a18602a04d8211299d7283af2164d90fcd"
+    },
+    {
+      "id": "VCSL-UprightKnight",
+      "name": "Upright Knight",
+      "category": "Piano droit",
+      "description": "Piano droit anglais Knight, enregistré par Simon Dalzell (Ivy Audio), 2 couches de vélocité.",
+      "author": "Versilian Studios (VCSL), Simon Dalzell",
+      "license": "CC0 1.0",
+      "source": "https://github.com/sgossner/VCSL",
+      "file": "VCSL-UprightKnight.sf2",
+      "url": "https://github.com/aspitrine/livekeys-sounds/releases/download/v1/VCSL-UprightKnight.sf2",
+      "size": 159783216,
+      "sha256": "6e0d99cd38134f413cc23065ed2da50617edef72cecae3e88ca37871ded70659"
+    },
+    {
       "id": "SplendidGrand",
       "name": "Splendid Grand Piano",
       "category": "Piano à queue",
@@ -26,6 +52,45 @@
       "url": "https://github.com/aspitrine/livekeys-sounds/releases/download/v1/SplendidGrand.sf2",
       "size": 257888484,
       "sha256": "114a58879c2abbc118d517eb3a62aca3b8cd66bcb76687f05db6d04a891c85ba"
+    },
+    {
+      "id": "SalamanderGrand",
+      "name": "Salamander Grand Piano",
+      "category": "Piano à queue",
+      "description": "Yamaha C5 de concert, 5 couches de vélocité. La référence des pianos libres.",
+      "author": "Alexander Holm",
+      "license": "CC BY 3.0",
+      "source": "https://github.com/sfzinstruments/SalamanderGrandPiano",
+      "file": "SalamanderGrand.sf2",
+      "url": "https://github.com/aspitrine/livekeys-sounds/releases/download/v1/SalamanderGrand.sf2",
+      "size": 283231182,
+      "sha256": "6602bc17c091c54bd352ce42a6c74f6635015f95d4bc05a653306a470edcb899"
+    },
+    {
+      "id": "VCSL-GrandKawai",
+      "name": "Grand Kawai",
+      "category": "Piano à queue",
+      "description": "Piano à queue Kawai, 4 couches de vélocité, son doux et rond.",
+      "author": "Versilian Studios (VCSL)",
+      "license": "CC0 1.0",
+      "source": "https://github.com/sgossner/VCSL",
+      "file": "VCSL-GrandKawai.sf2",
+      "url": "https://github.com/aspitrine/livekeys-sounds/releases/download/v1/VCSL-GrandKawai.sf2",
+      "size": 251105846,
+      "sha256": "bba64bd4a2e8e33b79a03cef4b17e634dfdeba501ca92ff948702b1023bc2d14"
+    },
+    {
+      "id": "YDPGrand",
+      "name": "YDP Grand Piano",
+      "category": "Piano à queue",
+      "description": "Yamaha Disklavier Pro, plus léger que les autres pianos à queue.",
+      "author": "Zenph Studios (OLPC), SF2 par FreePats",
+      "license": "CC BY 3.0",
+      "source": "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html",
+      "file": "YDPGrand.sf2",
+      "url": "https://github.com/aspitrine/livekeys-sounds/releases/download/v1/YDPGrand.sf2",
+      "size": 118398836,
+      "sha256": "5b144b4e60344b5e1709ea643bc4d031a21ec7314288c8d60f992e4abf82ad35"
     },
     {
       "id": "jRhodes3c",
@@ -52,6 +117,32 @@
       "url": "https://github.com/aspitrine/livekeys-sounds/releases/download/v1/jRhodes3d.sf2",
       "size": 157310374,
       "sha256": "9c666dbd232a95dc125747896150d36f5d008d0bbb0064a57ec4a6afe646e565"
+    },
+    {
+      "id": "Yamaha-CP80",
+      "name": "Yamaha CP80",
+      "category": "Piano électrique",
+      "description": "Piano électroacoustique à cordes des années 80, brillant et percutant.",
+      "author": "Greg Sullivan, SFZ par kinwie",
+      "license": "CC BY 3.0",
+      "source": "https://github.com/sfzinstruments/GregSullivan.E-Pianos",
+      "file": "Yamaha-CP80.sf2",
+      "url": "https://github.com/aspitrine/livekeys-sounds/releases/download/v1/Yamaha-CP80.sf2",
+      "size": 45114682,
+      "sha256": "1d321a9130b6cb466cdaf89ec19de942ee6cd0b3de3c3d400e574d7bc94988a5"
+    },
+    {
+      "id": "Hohner-PianetT",
+      "name": "Hohner Pianet T",
+      "category": "Piano électrique",
+      "description": "Piano électrique à lames des années 60-70, son doux et boisé.",
+      "author": "Greg Sullivan, SFZ par kinwie",
+      "license": "CC BY 3.0",
+      "source": "https://github.com/sfzinstruments/GregSullivan.E-Pianos",
+      "file": "Hohner-PianetT.sf2",
+      "url": "https://github.com/aspitrine/livekeys-sounds/releases/download/v1/Hohner-PianetT.sf2",
+      "size": 38001110,
+      "sha256": "2c48bdecf14ff649a47580abb67bfc92e2c26d9129277071df6a5ccae905d1a2"
     }
   ]
 }

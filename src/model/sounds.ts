@@ -10,6 +10,8 @@ const gu = (program: number, name: string, bankNumber = 0): SoundRef => ({
 /** Handy presets used by the default concert and new layers. Full list comes from the SF2 files. */
 export const SOUNDS = {
   upright: { bank: 'UprightPianoKW-small', bankNumber: 0, program: 0, name: 'Upright piano KW' },
+  brightUpright: { bank: 'UprightPianoKW-bright', bankNumber: 0, program: 0, name: 'Upright KW brillant' },
+  wurlitzer: { bank: 'Wurlitzer-EP200', bankNumber: 0, program: 0, name: 'Wurlitzer EP200' },
   grand: gu(0, 'Grand Piano'),
   tineEP: gu(4, 'Tine Electric Piano'),
   drawbar: gu(16, 'Drawbar Organ'),

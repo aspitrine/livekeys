@@ -20,6 +20,7 @@ export function tapTempo(taps: readonly number[], now: number): { taps: number[]
   const kept =
     last !== undefined && now > last && now - last <= RESET_MS ? [...taps, now].slice(-(INTERVALS + 1)) : [now];
   if (kept.length < 2) return { taps: kept };
-  const average = (kept[kept.length - 1] - kept[0]) / (kept.length - 1);
+  // `kept` ends with `now` and holds at least two taps here.
+  const average = (now - kept[0]!) / (kept.length - 1);
   return { taps: kept, bpm: clampTempo(60_000 / average) };
 }

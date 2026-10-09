@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import AudioEngine from '../../modules/audio-engine';
-import { useEngineStatus } from '../engine/boot';
+import { rescanMidi, useEngineStatus } from '../engine/boot';
 import { isBankInstalled } from '../engine/catalog';
+import { installedPluginIds } from '../engine/plugins';
 import { useLayerErrors } from '../engine/sync';
 import { checkConcert } from '../lib/concertCheck';
 import { useConcert } from '../store/concert';
@@ -24,6 +24,7 @@ export function ConcertCheck() {
   const error = useEngineStatus((s) => s.error);
   const sources = useEngineStatus((s) => s.sources);
   const bluetooth = useEngineStatus((s) => s.bluetooth);
+  const midiError = useEngineStatus((s) => s.midiError);
   const [scan, setScan] = useState<Scan>({ state: 'running' });
   /** Only the latest scan may report, and none after unmount. */
   const generation = useRef(0);
@@ -32,15 +33,11 @@ export function ConcertCheck() {
     const request = ++generation.current;
     setScan({ state: 'running' });
     try {
-      AudioEngine.refreshMidi();
-      useEngineStatus.setState({ sources: AudioEngine.getMidiSources() });
+      rescanMidi();
     } catch (e) {
       console.warn('[concert check] MIDI refresh', e);
     }
-    AudioEngine.listPlugins('all')
-      .then((list) => new Set(list.map((p) => p.id)))
-      .catch(() => null)
-      .then((plugins) => request === generation.current && setScan({ state: 'done', plugins }));
+    installedPluginIds().then((plugins) => request === generation.current && setScan({ state: 'done', plugins }));
   }, []);
   useEffect(() => {
     run();
@@ -102,12 +99,15 @@ export function ConcertCheck() {
           level={error ? 'error' : info?.running ? 'ok' : 'warning'}
           text={
             error
-              ? `Moteur audio arrêté : ${error}`
+              ? `Moteur audio arrêté (${error}) : nouvel essai automatique en cours.`
               : info?.running
                 ? `Moteur audio actif · sortie ${info.outputRoute} · ${info.sampleRate / 1000} kHz, ${info.bufferFrames} échantillons`
                 : 'Moteur audio non démarré.'
           }
         />
+        {midiError && (
+          <Line level="error" text={`MIDI indisponible (${midiError}) : nouvel essai automatique en cours.`} />
+        )}
         {sources.length ? (
           sources.map((s) => <Line key={s.id} level="ok" text={`Entrée MIDI : ${s.name}`} />)
         ) : (

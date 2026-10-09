@@ -88,6 +88,8 @@ declare class AudioEngineModule extends NativeModule<AudioEngineModuleEvents> {
   setMidiMonitorEnabled(enabled: boolean): void;
   /** Re-scans and reconnects MIDI sources. */
   refreshMidi(): void;
+  /** Retries CoreMIDI setup after `start` reported `midiError`. Throws while CoreMIDI is still unavailable. */
+  startMidi(): Promise<void>;
   noteOn(note: number, velocity: number, channel: number): void;
   noteOff(note: number, channel: number): void;
 }

@@ -75,7 +75,7 @@ export function SoundBrowser({ selected, query, onChoose }: Props) {
     );
   }
 
-  const category = CATEGORIES.find((c) => c.id === place.category) ?? CATEGORIES[0];
+  const category = CATEGORIES.find((c) => c.id === place.category) ?? CATEGORIES[0]!;
   const count = (categoryId: string, subId?: string) =>
     [...grouped.entries()]
       .filter(([key]) => (subId ? key === `${categoryId}/${subId}` : key.startsWith(`${categoryId}/`)))
@@ -105,7 +105,7 @@ export function SoundBrowser({ selected, query, onChoose }: Props) {
           return (
             <Pressable
               key={c.id}
-              onPress={() => setPlace({ category: c.id, subcategory: c.subcategories[0].id })}
+              onPress={() => setPlace({ category: c.id, subcategory: c.subcategories[0]!.id })}
               style={[styles.item, active && styles.itemActive]}
             >
               <Icon name={c.icon} size={16} color={active ? colors.text : colors.textDim} />
@@ -154,13 +154,13 @@ export function SoundBrowser({ selected, query, onChoose }: Props) {
               active={soundKey(item.sound) === selectedKey}
               subtitle={
                 item.reference
-                  ? BANK_LABELS[item.sound.bank]
+                  ? (BANK_LABELS[item.sound.bank] ?? item.sound.bank)
                   : `GeneralUser GS${item.sound.bankNumber > 0 && item.sound.bankNumber < 128 ? ` · variation ${item.sound.bankNumber}` : ''}`
               }
               onPress={() => onChoose(item.sound)}
             />
           ) : (
-            <DownloadRow bank={item.bank} status={library[item.bank.id]} />
+            <DownloadRow bank={item.bank} status={library[item.bank.id] ?? { state: 'absent' }} />
           )
         }
         ListEmptyComponent={<Text style={styles.empty}>Aucun son dans cette catégorie.</Text>}

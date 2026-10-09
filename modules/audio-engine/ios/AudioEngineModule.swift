@@ -38,11 +38,22 @@ public class AudioEngineModule: Module {
 
     // MARK: Engine
 
+    /// Audio failures reject; a MIDI failure does not: audio must play even when CoreMIDI is not ready (its server
+    /// may be shutting down right after a previous instance exited). It is reported as `midiError`, and JS retries
+    /// with `startMidi`.
     AsyncFunction("start") { (options: EngineOptions) -> [String: Any] in
-      let info = try self.mixer.start(options: options)
-      try self.midi.start()
+      var info = try self.mixer.start(options: options)
+      do {
+        try self.midi.start()
+      } catch {
+        info["midiError"] = error.localizedDescription
+      }
       return info
     }
+
+    /// Retries CoreMIDI setup after `start` reported `midiError`. No-op once MIDI is running.
+    /// Async: setup hops to the main thread, which a synchronous call from the JS thread could deadlock.
+    AsyncFunction("startMidi") { try self.midi.start() }
 
     Function("stop") { self.mixer.stop() }
 

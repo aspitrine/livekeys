@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import AudioEngine, { type PluginInfo, type PluginKind } from '../../modules/audio-engine';
+import AudioEngine, { type PluginInfo, type PluginKind, type PluginSlot } from '../../modules/audio-engine';
 import type { PluginRef } from '../model/types';
 
 /**
@@ -27,3 +27,21 @@ export const toPluginRef = (p: PluginInfo): PluginRef => ({
   name: p.name,
   manufacturer: p.manufacturer,
 });
+
+/** Ids of every installed Audio Unit, or null when the scan fails. */
+export const installedPluginIds = () =>
+  AudioEngine.listPlugins('all')
+    .then((list) => new Set(list.map((p) => p.id)))
+    .catch(() => null);
+
+/** Factory presets of a loaded Audio Unit. Throws while the AU is not loaded. */
+export const pluginPresets = (layerId: string, slot: PluginSlot) => AudioEngine.getPluginPresets(layerId, slot);
+
+export const selectPluginPreset = (layerId: string, slot: PluginSlot, number: number) =>
+  AudioEngine.selectPluginPreset(layerId, slot, number);
+
+/** Writable parameters of a loaded Audio Unit. Throws while the AU is not loaded. */
+export const pluginParameters = (layerId: string, slot: PluginSlot) => AudioEngine.getPluginParameters(layerId, slot);
+
+export const setPluginParameter = (layerId: string, slot: PluginSlot, address: number, value: number) =>
+  AudioEngine.setPluginParameter(layerId, slot, address, value);

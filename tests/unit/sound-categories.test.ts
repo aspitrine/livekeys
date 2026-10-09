@@ -6,6 +6,11 @@ import {
   placeLabel,
   placeOf,
 } from '../../src/model/soundCategories';
+import fs from 'node:fs';
+import path from 'node:path';
+
+import { BANK_LABELS } from '../../src/engine/catalog';
+import { LIBRARY } from '../../src/model/library';
 import { bundledPresets } from '../soundFontPresets';
 
 const generalUser = bundledPresets('GeneralUser-GS');
@@ -87,4 +92,18 @@ test('category labels describe the reclassified instruments', () => {
   );
   expect(placeLabel({ category: 'strings', subcategory: 'pizz' })).toBe('Cordes › Pizzicato & harpe');
   expect(placeLabel({ category: 'missing', subcategory: 'missing' })).toBe('');
+});
+
+test('every bank, bundled or downloadable, has its place and its name in the sound browser', () => {
+  const bundled = fs
+    .readdirSync(path.join(__dirname, '../../modules/audio-engine/ios/SoundFonts'))
+    .filter((f) => f.endsWith('.sf2') && f !== 'GeneralUser-GS.sf2')
+    .map((f) => f.replace('.sf2', ''));
+  for (const bank of [...bundled, ...LIBRARY.map((b) => b.id)]) {
+    expect({ bank, place: BANK_PLACES[bank] }).toEqual({
+      bank,
+      place: expect.objectContaining({ category: 'pianos' }),
+    });
+    expect(BANK_LABELS[bank]).toBeTruthy();
+  }
 });

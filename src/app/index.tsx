@@ -9,6 +9,8 @@ import { TopBar } from '../components/TopBar';
 import { selectCurrentPatch, useConcert } from '../store/concert';
 import { colors } from '../theme';
 
+export { ScreenError as ErrorBoundary } from '../components/ScreenError';
+
 /** Performance screen: setlist on the left, current patch mixer + split keyboard on the right. */
 export default function PerformScreen() {
   const patch = useConcert(selectCurrentPatch);

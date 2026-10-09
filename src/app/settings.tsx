@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
-import AudioEngine, { type VelocityCurveKind } from '../../modules/audio-engine';
+import type { VelocityCurveKind } from '../../modules/audio-engine';
 import { Button } from '../components/Button';
 import {
   MAPPABLE_TARGETS,
@@ -12,10 +12,13 @@ import {
   useMidiLearn,
   useMidiPickup,
 } from '../engine/controls';
-import { useEngineStatus } from '../engine/boot';
+import { showBluetoothMidi, useEngineStatus } from '../engine/boot';
 import { exportConcert, pickConcert } from '../lib/concertFile';
+import { defaultConcert } from '../model/defaults';
 import { useConcert } from '../store/concert';
 import { colors } from '../theme';
+
+export { ScreenError as ErrorBoundary } from '../components/ScreenError';
 
 const CURVES: { id: VelocityCurveKind; label: string }[] = [
   { id: 'light', label: 'Léger' },
@@ -43,6 +46,16 @@ export default function SettingsScreen() {
       Alert.alert('Import impossible', String(e instanceof Error ? e.message : e));
     }
   };
+
+  const loadDemo = () =>
+    Alert.alert(
+      'Charger le concert de démonstration ?',
+      'Neuf patches prêts à jouer (pianos, Wurlitzer, orgue, cordes, nappes) remplacent le concert actuel. Exporte-le avant si besoin.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Remplacer', style: 'destructive', onPress: () => loadConcert(defaultConcert()) },
+      ],
+    );
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -165,9 +178,7 @@ export default function SettingsScreen() {
           <Button
             icon="antenna.radiowaves.left.and.right"
             label="Connecter…"
-            onPress={() =>
-              AudioEngine.showBluetoothMidi().catch((e) => Alert.alert('Bluetooth MIDI', String(e?.message ?? e)))
-            }
+            onPress={() => showBluetoothMidi().catch((e) => Alert.alert('Bluetooth MIDI', String(e?.message ?? e)))}
           />
         </View>
         <Toggle
@@ -231,6 +242,7 @@ export default function SettingsScreen() {
             onPress={() => exportConcert(concert).catch(console.warn)}
           />
           <Button icon="square.and.arrow.down" label="Importer…" onPress={importConcert} />
+          <Button icon="sparkles" label="Concert de démonstration…" variant="subtle" onPress={loadDemo} />
         </View>
         <View style={styles.row}>
           <View style={styles.flex}>
@@ -260,7 +272,7 @@ function Toggle(props: { label: string; hint: string; value: boolean; onChange: 
         <Text style={styles.label}>{props.label}</Text>
         <Text style={styles.hint}>{props.hint}</Text>
       </View>
-      <Switch value={props.value} onValueChange={props.onChange} />
+      <Switch accessibilityLabel={props.label} value={props.value} onValueChange={props.onChange} />
     </View>
   );
 }

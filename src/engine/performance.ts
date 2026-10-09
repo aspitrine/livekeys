@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 
 import AudioEngine, { type PerformanceInfo } from '../../modules/audio-engine';
-import { colors } from '../theme';
 
 const POLL_MS = 1000;
 const HISTORY = 60;
@@ -41,7 +40,5 @@ export function startPerformanceMonitor() {
   }, POLL_MS);
 }
 
-/** Colour for a load in %: comfortable, getting busy, risk of glitches. */
+/** Engine load in %: comfortable, getting busy, risk of glitches. */
 export const loadLevel = (percent: number) => (percent < 50 ? 'ok' : percent < 75 ? 'busy' : 'critical');
-
-export const LOAD_COLORS = { ok: colors.success, busy: colors.warning, critical: colors.danger };

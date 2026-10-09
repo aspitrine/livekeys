@@ -2,12 +2,12 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import AudioEngine from '../../modules/audio-engine';
 import { useEngineStatus } from '../engine/boot';
+import { useEngineEvent } from '../engine/events';
 import { panic } from '../engine/pads';
-import { LOAD_COLORS, loadLevel, usePerformance } from '../engine/performance';
+import { loadLevel, usePerformance } from '../engine/performance';
 import { useConcert } from '../store/concert';
-import { colors } from '../theme';
+import { colors, loadColors } from '../theme';
 import { Button } from './Button';
 import { Icon } from './Icon';
 import { LevelMeter } from './LevelMeter';
@@ -101,28 +101,27 @@ export function TopBar() {
 /** MIDI input name with an activity LED that flashes on every note. */
 function MidiPill() {
   const sources = useEngineStatus((s) => s.sources);
+  const midiError = useEngineStatus((s) => s.midiError);
   const [active, setActive] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  useEffect(() => {
-    const sub = AudioEngine.addListener('onMidiEvent', (e) => {
-      if (e.type !== 'noteOn' && e.type !== 'cc') return;
-      setActive(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setActive(false), 120);
-    });
-    return () => sub.remove();
-  }, []);
+  useEngineEvent('onMidiEvent', (e) => {
+    if (e.type !== 'noteOn' && e.type !== 'cc') return;
+    setActive(true);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setActive(false), 120);
+  });
+  useEffect(() => () => clearTimeout(timer.current), []);
 
   const connected = sources.length > 0;
-  const led = active ? colors.accent : connected ? colors.success : colors.textMuted;
+  const led = midiError ? colors.danger : active ? colors.accent : connected ? colors.success : colors.textMuted;
 
   return (
     <View style={styles.pill}>
       <View style={[styles.led, { backgroundColor: led }, active && styles.ledActive]} />
       <Icon name="pianokeys" size={14} color={connected ? colors.textDim : colors.textMuted} />
       <Text style={[styles.pillText, !connected && styles.muted]} numberOfLines={1}>
-        {connected ? sources.map((s) => s.name).join(', ') : 'Aucun clavier'}
+        {midiError ? 'MIDI indisponible' : connected ? sources.map((s) => s.name).join(', ') : 'Aucun clavier'}
       </Text>
     </View>
   );
@@ -134,7 +133,7 @@ function AudioPill() {
   const current = usePerformance((p) => p.current);
   const overloads = usePerformance((p) => p.overloads);
   const load = current?.load ?? 0;
-  const color = error ? colors.danger : LOAD_COLORS[loadLevel(Math.max(load, (current?.peak ?? 0) * 0.75))];
+  const color = error ? colors.danger : loadColors[loadLevel(Math.max(load, (current?.peak ?? 0) * 0.75))];
 
   return (
     <Pressable

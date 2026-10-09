@@ -5,6 +5,9 @@ export default {
   setItem: jest.fn(async (key: string, value: string) => {
     items.set(key, value);
   }),
+  setItemSync: jest.fn((key: string, value: string) => {
+    items.set(key, value);
+  }),
   removeItemSync: jest.fn((key: string) => {
     items.delete(key);
   }),

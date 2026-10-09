@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type GestureResponderEvent, type LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 
-import AudioEngine from '../../modules/audio-engine';
+import { useEngineEvent } from '../engine/events';
+import { playNote, releaseNote } from '../engine/notes';
 import { isBlackKey, noteName, PIANO_HIGH, PIANO_LOW } from '../lib/notes';
 import type { LayerDef } from '../model/types';
 import { colors } from '../theme';
@@ -47,13 +48,13 @@ function hitTest(x: number, y: number, width: number, height: number): { note: n
     });
     if (black !== undefined) return { note: black, velocity: velocityFor(y / (height * BLACK_DEPTH)) };
   }
-  const white = WHITES[Math.min(Math.floor(pct / WHITE_W), WHITES.length - 1)];
+  const white = WHITES[Math.min(Math.floor(pct / WHITE_W), WHITES.length - 1)]!;
   return { note: white, velocity: velocityFor(y / height) };
 }
 
 /** Key whose centre is closest to a horizontal position (in % of the keyboard width). */
 function noteAt(percent: number) {
-  let best = NOTES[0];
+  let best = NOTES[0]!;
   let bestDistance = Infinity;
   for (const n of NOTES) {
     const r = keyRect(n);
@@ -127,6 +128,7 @@ function RangeEditor(props: {
   return (
     <View
       style={styles.rangeTrack}
+      accessibilityLabel={`Zone de clavier ${noteName(props.low)} – ${noteName(props.high)}`}
       onLayout={(e) => (width.current = e.nativeEvent.layout.width || 1)}
       onStartShouldSetResponder={() => true}
       onMoveShouldSetResponder={() => true}
@@ -157,18 +159,15 @@ function RangeEditor(props: {
 /** Lights up notes played on the hardware keyboard (or on screen). */
 function useHeldNotes() {
   const [held, setHeld] = useState<ReadonlySet<number>>(new Set());
-  useEffect(() => {
-    const sub = AudioEngine.addListener('onMidiEvent', (e) => {
-      if (e.type !== 'noteOn' && e.type !== 'noteOff') return;
-      setHeld((prev) => {
-        const next = new Set(prev);
-        if (e.type === 'noteOn') next.add(e.data1);
-        else next.delete(e.data1);
-        return next;
-      });
+  useEngineEvent('onMidiEvent', (e) => {
+    if (e.type !== 'noteOn' && e.type !== 'noteOff') return;
+    setHeld((prev) => {
+      const next = new Set(prev);
+      if (e.type === 'noteOn') next.add(e.data1);
+      else next.delete(e.data1);
+      return next;
     });
-    return () => sub.remove();
-  }, []);
+  });
   return held;
 }
 
@@ -214,7 +213,7 @@ export function SplitKeyboard({ layers, onPickNote, height = 120, focusLayerId, 
       // Navigation can remove the touch surface before UIKit sends touchEnd/cancel.
       const notes = new Set(activeFingers.values());
       activeFingers.clear();
-      for (const note of notes) AudioEngine.noteOff(note, 0);
+      for (const note of notes) releaseNote(note);
     };
   }, []);
 
@@ -225,7 +224,7 @@ export function SplitKeyboard({ layers, onPickNote, height = 120, focusLayerId, 
   const release = (note: number) => {
     // Another finger may still hold the same key.
     // Only playing touches enter the map; the mode may change before they end.
-    if (![...fingers.current.values()].includes(note)) AudioEngine.noteOff(note, 0);
+    if (![...fingers.current.values()].includes(note)) releaseNote(note);
   };
 
   const onTouch = (e: GestureResponderEvent, phase: 'start' | 'move' | 'end') => {
@@ -249,7 +248,7 @@ export function SplitKeyboard({ layers, onPickNote, height = 120, focusLayerId, 
       if (previous !== undefined) release(previous);
       if (hit) {
         fingers.current.set(id, hit.note);
-        AudioEngine.noteOn(hit.note, hit.velocity, 0);
+        playNote(hit.note, hit.velocity);
       }
     }
     setTouched(new Set(fingers.current.values()));

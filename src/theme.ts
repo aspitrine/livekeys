@@ -13,5 +13,5 @@ export const colors = {
   success: '#46a758',
 };
 
-/** Layer colors, assigned round-robin when a layer is created. */
-export const layerColors = ['#4f8cff', '#f5a524', '#46a758', '#d6409f', '#8e4ec6', '#12a594', '#e54d2e', '#ffc53d'];
+/** CPU load levels of the engine (see `loadLevel`): comfortable, getting busy, risk of glitches. */
+export const loadColors = { ok: colors.success, busy: colors.warning, critical: colors.danger };

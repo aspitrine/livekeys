@@ -1,6 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
+import { parseConcert } from '../model/concertSchema';
 import type { Concert } from '../model/types';
 
 const FORMAT = 'livekeys-concert';
@@ -21,19 +22,23 @@ export async function pickConcert(): Promise<Concert | null> {
   const picked = await File.pickFileAsync({ mimeTypes: ['application/json', 'public.json'] });
   if (picked.canceled) return null;
 
-  const data = JSON.parse(await picked.result.text());
-  if (data?.format !== FORMAT || !Array.isArray(data.concert?.sets)) {
-    throw new Error('Ce fichier n’est pas un concert LiveKeys.');
+  let data: unknown;
+  try {
+    data = JSON.parse(await picked.result.text());
+  } catch {
+    throw new Error('Ce fichier n’est pas un concert LiveKeys (JSON illisible).');
   }
-  const concert = data.concert as Concert;
-  // Files from older versions: fill fields added since.
-  return {
-    ...concert,
-    mappings: concert.mappings ?? [],
-    masterEffects: concert.masterEffects ?? [],
-    sets: concert.sets.map((s) => ({
-      ...s,
-      patches: s.patches.map((p) => ({ ...p, layers: p.layers.map((l) => ({ ...l, effects: l.effects ?? [] })) })),
-    })),
-  };
+  return readConcertFile(data);
+}
+
+/** Checks an exported concert file (any version) and returns its concert, with fields added since filled in. */
+export function readConcertFile(data: unknown): Concert {
+  const file = data as { format?: unknown; version?: unknown; concert?: unknown } | null;
+  if (file?.format !== FORMAT) throw new Error('Ce fichier n’est pas un concert LiveKeys.');
+  if (typeof file.version === 'number' && file.version > VERSION) {
+    throw new Error('Ce concert vient d’une version plus récente de LiveKeys : mets l’app à jour.');
+  }
+  const result = parseConcert(file.concert);
+  if ('error' in result) throw new Error(`Concert invalide (${result.error}).`);
+  return result.concert;
 }

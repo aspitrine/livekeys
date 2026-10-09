@@ -1,7 +1,9 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "react", "jest"],
-  "categories": { "correctness": "error" },
+  "categories": {
+    "correctness": "error"
+  },
   "rules": {
     "react/rules-of-hooks": "error",
     "react/exhaustive-deps": "error",
@@ -11,5 +13,92 @@
     "jest/no-disabled-tests": "error"
   },
   "ignorePatterns": ["ios/**", "android/**", "coverage/**", ".expo/**", "dist/**", "node_modules/**", "website/**"],
-  "overrides": [{ "files": ["tests/**"], "env": { "jest": true } }]
+  "overrides": [
+    {
+      "files": ["tests/**"],
+      "env": {
+        "jest": true
+      }
+    },
+    {
+      "files": ["src/model/**", "src/lib/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/components/*", "**/theme", "**/app/*", "**/engine/*", "**/store/*"],
+                "message": "model/lib sont la base : ils ne d\u00e9pendent ni de l'UI, ni du moteur, ni du store."
+              },
+              {
+                "group": ["**/modules/audio-engine"],
+                "allowTypeImports": true,
+                "message": "model/lib ne pilotent pas le moteur natif (types seulement)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/store/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/components/*", "**/theme", "**/app/*", "**/engine/*"],
+                "message": "Le store ne d\u00e9pend ni de l'UI ni du moteur : c'est le moteur qui suit le store."
+              },
+              {
+                "group": ["**/modules/audio-engine"],
+                "allowTypeImports": true,
+                "message": "Le store ne pilote pas le moteur natif (types seulement)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/engine/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/components/*", "**/theme", "**/app/*"],
+                "message": "Le moteur ne d\u00e9pend pas de l'UI (couleurs et libell\u00e9s vont dans components/ ou theme)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/components/**", "src/app/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "../../modules/audio-engine",
+                "importNames": ["default"],
+                "message": "L'UI passe par src/engine (hooks et commandes), pas par le module natif."
+              },
+              {
+                "name": "../../../modules/audio-engine",
+                "importNames": ["default"],
+                "message": "L'UI passe par src/engine (hooks et commandes), pas par le module natif."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

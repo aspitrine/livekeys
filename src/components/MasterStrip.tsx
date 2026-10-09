@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import AudioEngine from '../../modules/audio-engine';
-
+import { useEngineEvent } from '../engine/events';
 import { type EffectDef, MASTER_ID } from '../model/types';
 import { useConcert } from '../store/concert';
 import { colors } from '../theme';
@@ -29,33 +28,32 @@ export function MasterStrip() {
       <LimiterStatus enabled={limiter} />
       {/* Inserts on the whole mix, before the limiter (a shared reverb, an EQ…). Same for every patch. */}
       <EffectSlots hostId={MASTER_ID} effects={effects} rows={effects.length + 1} />
-      <Fader value={volume} onChange={setMasterVolume} color={colors.text} />
+      <Fader value={volume} onChange={setMasterVolume} color={colors.text} label="Volume master" />
       <Text style={styles.volume}>{Math.round(volume * 100)}</Text>
       <MidiPickupHint target={{ kind: 'masterVolume' }} />
     </View>
   );
 }
 
+const limiterLabel = (db: number) => (db > 0.5 ? `Limiteur −${db.toFixed(0)} dB` : 'Limiteur actif');
+
 /** "Limiteur −4 dB" while it squashes peaks (held ~1 s so it can be read), coloured like the meter. */
 function LimiterStatus({ enabled }: { enabled: boolean }) {
   const [reduction, setReduction] = useState(0);
   const heldUntil = useRef(0);
-  useEffect(() => {
-    const sub = AudioEngine.addListener('onLevel', (e) => {
-      const now = Date.now();
-      if (e.reductionDb >= reduction || now > heldUntil.current) {
-        heldUntil.current = now + 1000;
-        setReduction(e.reductionDb);
-      }
-    });
-    return () => sub.remove();
-  }, [reduction]);
+  useEngineEvent('onLevel', (e) => {
+    const now = Date.now();
+    if (e.reductionDb < reduction && now <= heldUntil.current) return;
+    heldUntil.current = now + 1000;
+    // ~30 events per second: re-render only when the text or its colour changes.
+    if (limiterLabel(e.reductionDb) !== limiterLabel(reduction)) setReduction(e.reductionDb);
+  });
 
   if (!enabled) return <Text style={styles.meta}>Sans limiteur</Text>;
   const working = reduction > 0.5;
   return (
     <Text style={[styles.meta, working && { color: reductionColor(reduction), fontWeight: '700' }]}>
-      {working ? `Limiteur −${reduction.toFixed(0)} dB` : 'Limiteur actif'}
+      {limiterLabel(reduction)}
     </Text>
   );
 }

@@ -1,4 +1,4 @@
-import type { IconName } from '../components/Icon';
+import type { IconName } from './icons';
 import type { LayerDef, SoundRef } from './types';
 
 export type Subcategory = { id: string; name: string; programs?: number[] };
@@ -128,10 +128,19 @@ export type Place = { category: string; subcategory: string };
 /** Whole banks dedicated to one instrument: always shown in their own place, first. */
 export const BANK_PLACES: Record<string, Place> = {
   'UprightPianoKW-small': { category: 'pianos', subcategory: 'upright' },
+  'UprightPianoKW-bright': { category: 'pianos', subcategory: 'upright' },
   UprightPianoKW: { category: 'pianos', subcategory: 'upright' },
+  'VCSL-UprightYamaha': { category: 'pianos', subcategory: 'upright' },
+  'VCSL-UprightKnight': { category: 'pianos', subcategory: 'upright' },
   SplendidGrand: { category: 'pianos', subcategory: 'grand' },
+  SalamanderGrand: { category: 'pianos', subcategory: 'grand' },
+  'VCSL-GrandKawai': { category: 'pianos', subcategory: 'grand' },
+  YDPGrand: { category: 'pianos', subcategory: 'grand' },
+  'Wurlitzer-EP200': { category: 'pianos', subcategory: 'electric' },
   jRhodes3c: { category: 'pianos', subcategory: 'electric' },
   jRhodes3d: { category: 'pianos', subcategory: 'electric' },
+  'Yamaha-CP80': { category: 'pianos', subcategory: 'electric' },
+  'Hohner-PianetT': { category: 'pianos', subcategory: 'electric' },
 };
 
 /**

@@ -8,6 +8,8 @@ import { bankFile } from './bankFiles';
 export const BANK_LABELS: Record<string, string> = {
   'GeneralUser-GS': 'GeneralUser GS',
   'UprightPianoKW-small': 'Upright Piano KW (léger)',
+  'UprightPianoKW-bright': 'Upright Piano KW (brillant)',
+  'Wurlitzer-EP200': 'Wurlitzer EP200',
   ...Object.fromEntries(LIBRARY.map((b) => [b.id, b.name])),
 };
 

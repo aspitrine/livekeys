@@ -6,6 +6,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { bootEngine } from '../engine/boot';
 import { colors } from '../theme';
 
+export { ScreenError as ErrorBoundary } from '../components/ScreenError';
+
 export default function RootLayout() {
   useEffect(() => {
     bootEngine();

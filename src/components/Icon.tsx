@@ -1,10 +1,10 @@
 import { SymbolView, type SymbolWeight } from 'expo-symbols';
 import type { ColorValue } from 'react-native';
-import type { SFSymbol } from 'sf-symbols-typescript';
 
+import type { IconName } from '../model/icons';
 import { colors } from '../theme';
 
-export type IconName = SFSymbol;
+export type { IconName };
 
 type Props = { name: IconName; size?: number; color?: ColorValue; weight?: SymbolWeight };
 

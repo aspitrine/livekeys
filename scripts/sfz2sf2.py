@@ -8,6 +8,9 @@ ranges, pitch_keycenter, tune / transpose, volume / group_volume, pan, cutoff, a
 (attack / hold / decay / sustain / release), loops (opcodes or smpl metadata in FLAC / WAV), stereo samples.
 Skipped regions: release triggers, CC-conditioned regions (pedal resonance…), keyswitches, round-robins > 1.
 Samples are decoded with macOS `afconvert` to 16-bit PCM.
+A positive `volume` (SF2 attenuation cannot boost) is applied to the sample data, limited to what fits without clipping.
+--max-seconds N: cut unlooped samples after N s with a 1 s fade-out. Piano tails ring for 20-30 s at a level nobody
+hears on stage; cutting them keeps big banks small enough to load on an iPad without dropping velocity layers.
 """
 import argparse
 import math
@@ -132,8 +135,11 @@ def flac_loop(path: str):
     return start, end
 
 
+FADE_SECONDS = 1.0
+
+
 class Sample:
-    def __init__(self, path: str, tmp: str):
+    def __init__(self, path: str, tmp: str, max_seconds: float | None = None, gain_db: float = 0):
         out = os.path.join(tmp, f'{abs(hash(path))}.wav')
         subprocess.run(['afconvert', '-f', 'WAVE', '-d', 'LEI16', path, out], check=True)
         with wave.open(out) as w:
@@ -144,6 +150,19 @@ class Sample:
         samples = struct.unpack(f'<{len(frames) // 2}h', frames)
         self.data = [samples[c::self.channels] for c in range(self.channels)]
         self.loop = flac_loop(path)
+        if gain_db > 0:
+            peak = max((abs(v) for c in self.data for v in c), default=0)
+            gain = min(10 ** (gain_db / 20), 32767 / max(peak, 1))
+            self.data = [[round(v * gain) for v in c] for c in self.data]
+        limit = round(max_seconds * self.rate) if max_seconds else 0
+        if limit and not self.loop and self.frames > limit:
+            fade = min(round(FADE_SECONDS * self.rate), limit)
+            for c in range(self.channels):
+                channel = list(self.data[c][:limit])
+                for i in range(fade):
+                    channel[limit - fade + i] = round(channel[limit - fade + i] * (fade - 1 - i) / fade)
+                self.data[c] = channel
+            self.frames = limit
 
 
 # ----------------------------------------------------------------------------------------------- SF2 write
@@ -164,6 +183,11 @@ def chunk(tag: bytes, payload: bytes) -> bytes:
 
 def name20(s: str) -> bytes:
     return s.encode('ascii', 'replace')[:19].ljust(20, b'\0')
+
+
+def sample_name(index: int, channel: int, path: str) -> str:
+    """Unique 19-character SF2 sample name: index and channel first, then as much of the file name as fits."""
+    return f'{index:04d}{"LR"[channel] if channel < 2 else channel}{os.path.splitext(os.path.basename(path.split('|')[0]))[0]}'[:19]
 
 
 def zstr(s: str) -> bytes:
@@ -208,19 +232,24 @@ def region_generators(r: dict, sample: Sample, channel_pan: int | None):
     return gens
 
 
-def write_sf2(regions, out_path: str, preset_name: str, copyright: str, comment: str):
+def write_sf2(regions, out_path: str, preset_name: str, copyright: str, comment: str, max_seconds: float | None = None):
     tmp = tempfile.mkdtemp()
+    # A boosted sample is a different sample: key the pool by path and boost.
+    for r in regions:
+        boost = max(float(r.get('volume', 0)) + float(r.get('group_volume', 0)), 0)
+        r['_key'] = f"{r['_path']}|{boost}" if boost else r['_path']
+        r['_boost'] = boost
     samples: dict[str, Sample] = {}
     for r in regions:
-        if r['_path'] not in samples:
-            samples[r['_path']] = Sample(r['_path'], tmp)
+        if r['_key'] not in samples:
+            samples[r['_key']] = Sample(r['_path'], tmp, max_seconds, r['_boost'])
             print(f'  decoded {os.path.basename(r["_path"])}', file=sys.stderr)
 
     # Sample pool: one SF2 sample per channel.
     smpl = bytearray()
     shdr = bytearray()
     sample_ids: dict[tuple[str, int], int] = {}
-    for path, s in samples.items():
+    for index, (path, s) in enumerate(samples.items()):
         ids = []
         for c in range(s.channels):
             start = len(smpl) // 2
@@ -228,7 +257,9 @@ def write_sf2(regions, out_path: str, preset_name: str, copyright: str, comment:
             end = start + s.frames
             ls, le = s.loop if s.loop else (0, s.frames - 1)
             ids.append(len(shdr) // 46)
-            shdr += struct.pack('<20sIIIIIBbHH', name20(f'{os.path.basename(path)[:16]}-{c}'),
+            # Names must be unique: Apple's sampler treats samples with the same name as one, so truncated names
+            # that only differ by their velocity layer or note would all play the first sample.
+            shdr += struct.pack('<20sIIIIIBbHH', name20(sample_name(index, c, path)),
                                 start, end, start + ls, start + min(le, s.frames - 1), s.rate, 60, 0, 0, 1)
             sample_ids[(path, c)] = ids[-1]
         if s.channels == 2:  # link left (type 4) and right (type 2)
@@ -236,6 +267,9 @@ def write_sf2(regions, out_path: str, preset_name: str, copyright: str, comment:
             for idx, link, kind in ((left, right, 4), (right, left, 2)):
                 off = idx * 46 + 42
                 shdr[off:off + 4] = struct.pack('<HH', link, kind)
+    names = [bytes(shdr[i:i + 20]) for i in range(0, len(shdr), 46)]
+    if len(set(names)) != len(names):
+        sys.exit('duplicate SF2 sample names: the sampler would play the wrong samples')
     shdr += struct.pack('<20sIIIIIBbHH', name20('EOS'), 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
     # One instrument, one zone per region and channel.
@@ -243,11 +277,11 @@ def write_sf2(regions, out_path: str, preset_name: str, copyright: str, comment:
     ibag = bytearray()
     gen_count = 0
     for r in regions:
-        s = samples[r['_path']]
+        s = samples[r['_key']]
         for c in range(s.channels):
             ibag += struct.pack('<HH', gen_count, 0)
             pan = None if s.channels == 1 else (-500 if c == 0 else 500)
-            for oper, amount in region_generators(r, s, pan) + [(GEN['sampleID'], sample_ids[(r['_path'], c)])]:
+            for oper, amount in region_generators(r, s, pan) + [(GEN['sampleID'], sample_ids[(r['_key'], c)])]:
                 if isinstance(amount, tuple):
                     igen += struct.pack('<HBB', oper, amount[1], amount[2])
                 else:
@@ -285,11 +319,12 @@ def main():
     p.add_argument('name')
     p.add_argument('--copyright', default='')
     p.add_argument('--comment', default='')
+    p.add_argument('--max-seconds', type=float)
     a = p.parse_args()
     regions = load_regions(a.sfz)
     if not regions:
         sys.exit('no playable regions')
-    write_sf2(regions, a.sf2, a.name, a.copyright, a.comment)
+    write_sf2(regions, a.sf2, a.name, a.copyright, a.comment, a.max_seconds)
 
 
 if __name__ == '__main__':

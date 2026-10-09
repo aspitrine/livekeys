@@ -2,7 +2,7 @@ import type { VelocityCurveKind } from '../../modules/audio-engine';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { defaultConcert, makeLayer, makePadLayer, makePatch } from '../model/defaults';
+import { defaultConcert, makeLayer, makePadLayer, newPatch } from '../model/defaults';
 import { SOUNDS } from '../model/sounds';
 import {
   type Concert,
@@ -128,7 +128,7 @@ function move<T extends { id: string }>(items: T[], id: string, delta: number): 
   const to = Math.min(Math.max(from + delta, 0), items.length - 1);
   if (from < 0 || from === to) return items;
   const next = [...items];
-  next.splice(to, 0, next.splice(from, 1)[0]);
+  next.splice(to, 0, ...next.splice(from, 1));
   return next;
 }
 
@@ -142,7 +142,7 @@ export const useConcert = create<ConcertState>()(
   persist(
     (set, get) => ({
       concert: initialConcert,
-      currentPatchId: initialConcert.sets[0].patches[0].id,
+      currentPatchId: allPatches(initialConcert)[0]?.id ?? null,
       masterVolume: 0.9,
       settings: DEFAULT_SETTINGS,
 
@@ -232,7 +232,7 @@ export const useConcert = create<ConcertState>()(
         }),
 
       addPatch: (setId, name) => {
-        const patch = makePatch(name, [{ sound: SOUNDS.grand }]);
+        const patch = newPatch(name);
         set(({ concert }) => ({
           concert: mapSets(concert, (s) => (s.id === setId ? { ...s, patches: [...s.patches, patch] } : s)),
           currentPatchId: patch.id,
@@ -262,8 +262,8 @@ export const useConcert = create<ConcertState>()(
           let copyId: string | null = null;
           const next = mapSets(concert, (s) => {
             const index = s.patches.findIndex((p) => p.id === id);
-            if (index < 0) return s;
             const source = s.patches[index];
+            if (!source) return s;
             const copy: Patch = {
               ...source,
               id: newId(),
@@ -338,7 +338,7 @@ export const useConcert = create<ConcertState>()(
             // Pads are not strips: they keep their slots, keyboard layers fill the others in the new order.
             const strips = placeAt(mixerLayers(p), layerId, index);
             let next = 0;
-            return { ...p, layers: p.layers.map((l) => (l.pad ? l : strips[next++])) };
+            return { ...p, layers: p.layers.map((l) => (l.pad ? l : (strips[next++] ?? l))) };
           }),
         })),
 

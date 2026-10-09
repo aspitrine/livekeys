@@ -6,12 +6,14 @@ import { Button } from '../components/Button';
 import { Icon } from '../components/Icon';
 import { useEngineStatus } from '../engine/boot';
 import { captureAudioDiagnostic } from '../engine/diagnostics';
-import { LOAD_COLORS, loadLevel, usePerformance } from '../engine/performance';
+import { loadLevel, usePerformance } from '../engine/performance';
 import { instrumentName } from '../model/defaults';
 import { selectCurrentPatch, useConcert } from '../store/concert';
-import { colors } from '../theme';
+import { colors, loadColors } from '../theme';
 
-const colorFor = (percent: number) => LOAD_COLORS[loadLevel(percent)];
+export { ScreenError as ErrorBoundary } from '../components/ScreenError';
+
+const colorFor = (percent: number) => loadColors[loadLevel(percent)];
 
 /** Live load of the audio engine: whole graph, per layer of the current patch, CPU and memory. */
 export default function PerformanceScreen() {

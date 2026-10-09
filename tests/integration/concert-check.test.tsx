@@ -5,13 +5,14 @@ import { ConcertCheck } from '../../src/components/ConcertCheck';
 import { useEngineStatus } from '../../src/engine/boot';
 import { syncPatches, useLayerErrors } from '../../src/engine/sync';
 import { selectCurrentPatch, useConcert } from '../../src/store/concert';
-import { resetConcert } from '../fixtures';
+import { APPLE_EFFECTS, resetConcert } from '../fixtures';
 
 beforeEach(() => {
   resetConcert();
   useEngineStatus.setState({ info: null, error: null, sources: [], bluetooth: [] });
   useLayerErrors.setState({}, true);
   useConcert.getState().setSetting('bluetoothDevices', []);
+  jest.mocked(AudioEngine.listPlugins).mockResolvedValue(APPLE_EFFECTS);
 });
 
 test('a clean concert reports its live connections and the limits of the check', async () => {
@@ -47,7 +48,9 @@ test('missing plugins can be selected, and a failed plugin scan is explained', a
   useEngineStatus.setState({ error: 'Session audio refusée' });
   await render(<ConcertCheck />);
   expect(await screen.findByText('1 erreur · 0 avertissement')).toBeOnTheScreen();
-  expect(screen.getByText('Moteur audio arrêté : Session audio refusée')).toBeOnTheScreen();
+  expect(
+    screen.getByText('Moteur audio arrêté (Session audio refusée) : nouvel essai automatique en cours.'),
+  ).toBeOnTheScreen();
   expect(screen.getByText('Aucune entrée MIDI : branche ou connecte le clavier.')).toBeOnTheScreen();
   await user.press(screen.getByRole('button', { name: 'Sélectionner' }));
   expect(useConcert.getState().currentPatchId).toBe(target.id);

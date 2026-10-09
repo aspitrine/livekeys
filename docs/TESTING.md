@@ -34,8 +34,17 @@ Oxfmt retains the existing single quotes and 120-column style; it replaces the o
   concurrent DSP counter reads and the lock-free musical clock (tempo/beat position given to AUv3 plugins). SwiftPM builds the same safety sources included by the iOS pod;
   Thread Sanitizer checks these tests for data races. This does not compile the entire iOS engine.
 
-Coverage thresholds apply to the ten critical JS/TS files explicitly listed in `jest.config.cjs` (80% lines/statements,
-75% functions, 65% branches). This is **not whole-app coverage**. Extend that list when adding another critical module.
+Coverage is measured on every file of `src/`, so a new module cannot escape it. Each layer (`lib/`, `model/`,
+`store/`, `engine/`, `components/`, `app/`) has its own threshold in `jest.config.cjs`, set just under its measured
+coverage (about 90% lines, 80% branches). This is a ratchet: raise a threshold when its layer improves, never lower one
+to hide a regression. Screens are tested in Jest too (`tests/integration/*-screen.test.tsx`), Maestro covers the
+real navigation and native rendering.
+
+`tests/mocks/file-system.ts` is an in-memory `expo-file-system` (files, contents, driven downloads). Use it instead of
+writing a new file-system mock in a test.
+
+`npm run typecheck` checks `src/` with `noUncheckedIndexedAccess` (an index or record lookup may be `undefined`).
+Tests use `tests/tsconfig.json`, without that flag: a wrong index in a test fails the test anyway.
 JS mocks and UI assertions do not verify Swift compilation, actual sound output, DSP glitches, MIDI/Bluetooth connectivity
 or third-party Audio Units. Changes to those areas also require a native build and an audio/MIDI smoke test on iPad.
 
@@ -71,6 +80,11 @@ NODE_OPTIONS='--dns-result-order=ipv4first' npm run start -- --localhost
 # In another terminal:
 MAESTRO_APP_URL='livekeys://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081' npm run test:e2e
 ```
+
+If a flow fails on « Moteur audio actif » and the concert check shows `avfaudio error -10851`, the simulator's own
+audio service is stuck (the app logs `there is no system object` from CoreAudio); the app keeps retrying, but only a
+simulator reboot fixes it: `xcrun simctl shutdown <UDID> && xcrun simctl boot <UDID>`. If a JS change does not show up
+in a flow, restart Metro with `--clear`: it can keep serving cached transforms of edited files.
 
 Once the project is linked to EAS, run the cloud workflow manually:
 

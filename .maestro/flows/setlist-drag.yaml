@@ -5,12 +5,12 @@ name: Drag and drop reorders patches
 - tapOn: 'Réorganiser les sets et patches'
 - assertVisible: 'Fais glisser les poignées.*'
 - assertVisible: 'Déplacer le patch Piano'
-# Piano's handle (first row) dropped below the last row, portrait iPad 13".
+# Piano's handle (first row) dropped below the last of the nine rows, portrait iPad 13".
 - swipe:
     start: 3%, 13%
-    end: 3%, 45%
-    duration: 1500
+    end: 3%, 80%
+    duration: 2500
 - assertVisible: 'Fin du concert'
-- assertVisible: 'Set 1 · 5/5'
+- assertVisible: 'Set 1 · 9/9'
 - tapOn: 'Terminer la réorganisation'
 - assertNotVisible: 'Déplacer le patch Piano'

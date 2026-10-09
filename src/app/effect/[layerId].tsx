@@ -12,6 +12,8 @@ import type { PluginRef } from '../../model/types';
 import { useConcert } from '../../store/concert';
 import { colors } from '../../theme';
 
+export { ScreenError as ErrorBoundary } from '../../components/ScreenError';
+
 type Item = { kind: 'preset'; preset: EffectPreset } | { kind: 'plugin'; plugin: PluginInfo };
 
 /** Effects grouped by type: ready-to-use settings first, then the raw Audio Units. */
@@ -20,7 +22,7 @@ export default function EffectBrowser() {
   const addEffect = useConcert((s) => s.addEffect);
   const { plugins, refresh } = usePlugins('effect');
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState(EFFECT_CATEGORIES[0].id);
+  const [category, setCategory] = useState(EFFECT_CATEGORIES[0]!.id);
 
   const add = (plugin: PluginRef) => {
     addEffect(layerId, plugin);

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import AudioEngine, { type PluginPreset } from '../../modules/audio-engine';
+import type { PluginPreset } from '../../modules/audio-engine';
+import { pluginPresets, selectPluginPreset } from '../engine/plugins';
 import { colors } from '../theme';
 import { Button } from './Button';
 import { Icon } from './Icon';
@@ -14,7 +15,7 @@ export function PresetPicker({ layerId, slot, reloadKey }: { layerId: string; sl
 
   useEffect(() => {
     try {
-      const result = AudioEngine.getPluginPresets(layerId, slot);
+      const result = pluginPresets(layerId, slot);
       setPresets(result.presets);
       setCurrent(result.current);
     } catch {
@@ -25,7 +26,7 @@ export function PresetPicker({ layerId, slot, reloadKey }: { layerId: string; sl
   if (!presets.length) return null;
 
   const choose = (preset: PluginPreset) => {
-    AudioEngine.selectPluginPreset(layerId, slot, preset.number);
+    selectPluginPreset(layerId, slot, preset.number);
     setCurrent(preset.number);
     setOpen(false);
   };

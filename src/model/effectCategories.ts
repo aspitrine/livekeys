@@ -1,5 +1,5 @@
 import type { PluginInfo } from '../../modules/audio-engine';
-import type { IconName } from '../components/Icon';
+import type { IconName } from './icons';
 import type { PluginRef } from './types';
 
 export type EffectCategory = { id: string; name: string; icon: IconName };
@@ -38,7 +38,7 @@ const APPLE_SUBTYPES: Record<string, string> = {
 export function effectCategoryOf(plugin: PluginInfo): string {
   const [, subtype, manufacturer] = plugin.id.split(':');
   if (manufacturer !== 'appl') return 'thirdparty';
-  return APPLE_SUBTYPES[subtype] ?? 'utility';
+  return (subtype && APPLE_SUBTYPES[subtype]) ?? 'utility';
 }
 
 /** A ready-to-use effect: an Apple Audio Unit with a factory preset and/or parameter values. */

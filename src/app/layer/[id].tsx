@@ -1,20 +1,22 @@
 import Slider from '@react-native-community/slider';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
-import AudioEngine from '../../../modules/audio-engine';
 import { Button } from '../../components/Button';
 import { SplitKeyboard } from '../../components/SplitKeyboard';
 import { EffectSlots } from '../../components/EffectSlots';
 import { PadEditor } from '../../components/PadEditor';
 import { Stepper } from '../../components/Stepper';
 import { BANK_LABELS } from '../../engine/catalog';
+import { useEngineEvent } from '../../engine/events';
 import { instrumentName } from '../../model/defaults';
 import { noteName } from '../../lib/notes';
 import type { LayerDef } from '../../model/types';
 import { mixerLayers, selectLayer, selectPatchOfLayer, useConcert } from '../../store/concert';
 import { colors } from '../../theme';
+
+export { ScreenError as ErrorBoundary } from '../../components/ScreenError';
 
 type LearnTarget = 'keyLow' | 'keyHigh' | null;
 
@@ -34,14 +36,13 @@ export default function LayerEditor() {
   const update = (p: Partial<LayerDef>) => updateLayer(id, p);
 
   // MIDI learn: the next note played on the hardware keyboard sets the split point.
-  useEffect(() => {
-    if (!learn) return;
-    const sub = AudioEngine.addListener('onMidiEvent', (e) => {
-      if (e.type !== 'noteOn') return;
-      pick(e.data1);
-    });
-    return () => sub.remove();
-  });
+  useEngineEvent(
+    'onMidiEvent',
+    (e) => {
+      if (e.type === 'noteOn') pick(e.data1);
+    },
+    learn !== null,
+  );
 
   if (!layer) return null;
   // Pads are not mixer strips: they have no position among the layers.
@@ -245,6 +246,7 @@ export default function LayerEditor() {
             <Text style={styles.label}>Pan</Text>
             <Slider
               style={styles.flex}
+              accessibilityLabel="Pan"
               value={layer.pan}
               minimumValue={-1}
               maximumValue={1}
@@ -262,7 +264,11 @@ export default function LayerEditor() {
           {!layer.pad && (
             <View style={styles.row}>
               <Text style={[styles.label, styles.flex]}>Pédale de sustain</Text>
-              <Switch value={layer.sustainEnabled} onValueChange={(sustainEnabled) => update({ sustainEnabled })} />
+              <Switch
+                accessibilityLabel="Pédale de sustain"
+                value={layer.sustainEnabled}
+                onValueChange={(sustainEnabled) => update({ sustainEnabled })}
+              />
             </View>
           )}
         </Section>

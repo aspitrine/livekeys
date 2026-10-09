@@ -46,6 +46,62 @@ npx expo install --fix      # fix incompatible package versions
 
 See `docs/TESTING.md` for commands, coverage scope, native E2E prerequisites and the manual EAS workflow.
 
+## Architecture
+
+Decisions made deliberately. Follow them; change one only on the user's request, and update this section with it.
+
+### Layers
+
+Code is organized by layer in `src/`. The direction of imports is enforced by `no-restricted-imports` in
+`.oxlintrc.json`; never disable that rule to make an import pass, move the code to the right layer instead.
+
+- `model/` and `lib/`: data types, rules and pure helpers. No UI, theme, store or engine imports; native module types only.
+  Values saved with the concert (e.g. layer colors) belong here, not in `theme.ts`.
+- `store/`: Zustand state (persisted concert and settings). No UI or engine imports; native module types only.
+- `engine/`: drives the native audio module and follows the store (the store never calls the engine). No UI or theme imports.
+- `components/` and `app/`: UI. They reach the native module only through `engine/`: `useEngineEvent` for native events,
+  command functions (`engine/notes.ts`, `engine/plugins.ts`, `rescanMidi`…) for calls. Never the module's default export.
+  Native views (`PluginEditorView`) and type imports are fine.
+- `src/app/` routes stay thin: screen composition and navigation, logic goes to the layers above.
+
+### Deliberately not done
+
+- **No full hexagonal architecture / dependency injection.** `engine/` is the adapter of the native module, and Jest
+  replaces that module at its boundary (`tests/mocks/audio-engine.tsx`). Ports, interfaces and DI containers would add
+  indirection without benefit for this single-developer app.
+- **No reorganization by feature yet.** Layers stay the organization while the app is small (~7k lines). Move to
+  `src/features/<name>/` progressively, one feature at a time when it grows, never in a big-bang refactor.
+- **No split of the concert store** (`settings` stays in `store/concert.ts`): splitting needs a migration of persisted
+  data, a risk not worth it now.
+- **No remote crash reporting** (no Sentry available). Screen crashes are logged with `console.error` by `ScreenError`;
+  do not add a reporting SDK without the user's decision.
+
+### Robustness rules
+
+- Every route exports `ErrorBoundary` (`export { ScreenError as ErrorBoundary } from '…/components/ScreenError'`),
+  so a crash stays inside its screen while the native engine keeps playing. New routes must do the same
+  (`tests/integration/screen-errors.test.tsx` fails otherwise).
+- Data from outside the app (imported concert files, any future external input) is validated with **valibot**
+  (not zod) at the boundary: `model/concertSchema.ts`, used by `lib/concertFile.ts`. Never cast untrusted data with
+  `as`. Fields added over time are optional with their default; a file from a newer app version is refused.
+- Persistence: when a persisted field changes, bump `version` and extend `migrate` in `store/concert.ts`, and keep
+  the import schema in sync. Debounced writes are flushed when the app leaves the foreground (`flushWrites`).
+- Native errors in engine calls are caught and surfaced to the user (concert check, alerts); never let a failing
+  plugin or MIDI call break a screen or stop the audio.
+- Engine start never gives up: a failed audio start is retried (`RETRY_MS` in `engine/boot.ts`, and at once when the
+  app comes back to the foreground), and a CoreMIDI failure never fails the audio start: native `start` reports it as
+  `midiError`, JS retries with `startMidi`. The concert must load as soon as audio runs, keyboards or not.
+
+### Types and tests
+
+- TypeScript `strict` + `noUncheckedIndexedAccess` on `src/`: handle `undefined` from index or record lookups with
+  `??` defaults; use `!` only on constant non-empty tables. Tests use `tests/tsconfig.json` without that flag.
+- Coverage is measured on all of `src/`, with a threshold per layer set just under its measured coverage (ratchet).
+  New code, UI and screens included, comes with tests that keep its layer above its threshold. Raise a threshold
+  when its layer improves, never lower one.
+- Accessibility is part of the UI contract: every control has an `accessibilityLabel` (switches, sliders, faders,
+  icon buttons), faders are `adjustable` for VoiceOver. Tests find controls by these labels.
+
 ## Navigation & Routing
 
 - Use **Expo Router** for all navigation. Routes live in `src/app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code (components, hooks, utils) outside `src/app/`.
